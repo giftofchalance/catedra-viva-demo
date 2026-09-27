@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cátedra Viva — Aula Aumentada con IA</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- KaTeX para visualización de ecuaciones matemáticas y macroeconómicas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+</head>
+<body>
+  <!-- Encabezado Principal y Barra de Navegación -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo">
+        <span class="logo-icon">🏛️</span>
+        <div>
+          <h1 class="brand-title">Cátedra Viva</h1>
+          <span class="brand-subtitle">Aula Aumentada con IA • Prototipo de Demostración</span>
+        </div>
+      </div>
+      <div class="course-badge" id="courseBadgeBtn" title="Ver alcance curricular permitido">
+        <span class="badge-dot"></span>
+        <span class="badge-code">IN4123</span>
+        <span class="badge-name">Macroeconomía</span>
+        <span class="badge-tag">Syllabus U1-U3 ▾</span>
+      </div>
+    </div>
+
+    <!-- Pestañas de Navegación -->
+    <nav class="app-nav">
+      <button class="nav-tab active" data-tab="live">
+        <span class="tab-indicator live-pulse"></span>
+        <span class="tab-icon">🔴</span>
+        1. Clase en Curso
+      </button>
+      <button class="nav-tab" data-tab="post">
+        <span class="tab-icon">📋</span>
+        2. Post-Clase
+      </button>
+      <button class="nav-tab" data-tab="recurrence">
+        <span class="tab-icon">🔄</span>
+        3. Recurrencia Histórica
+      </button>
+      <button class="nav-tab" data-tab="dashboard">
+        <span class="tab-icon">📊</span>
+        4. Dashboard Profesor
+      </button>
+    </nav>
+  </header>
+
+  <!-- Contenedor Principal de Vistas -->
+  <main class="app-main">
+    
+    <!-- ==========================================
+         VISTA 1: CLASE EN CURSO (Transmisión + Chat)
+         ========================================== -->
+    <section id="view-live" class="view-panel active">
+      <div class="live-layout">
+        
+        <!-- Panel Izquierdo: Transcripción en Vivo -->
+        <div class="transcript-panel">
+          <div class="panel-header">
+            <div class="panel-title-group">
+              <span class="live-pill" id="liveStatusPill">
+                <span class="pulse-ring"></span>
+                <span class="status-text">EN VIVO</span>
+              </span>
+              <div>
+                <h2 class="panel-heading">Transcripción de Cátedra: Modelo IS-LM</h2>
+                <p class="panel-subheading">Prof. Roberto Celis • Clase expositiva magistral</p>
+              </div>
+            </div>
+
+            <!-- Controles de la Simulación de Transcripción -->
+            <div class="sim-controls">
+              <div class="sim-time-display" id="simTimeDisplay">00:00:00 / 00:04:54</div>
+              <div class="btn-group">
+                <button id="btnPlayPause" class="btn btn-primary" title="Iniciar o pausar simulación">
+                  <span id="playIcon">▶</span> <span id="playText">Iniciar</span>
+                </button>
+                <button id="btnStepNext" class="btn btn-secondary" title="Avanzar a la siguiente frase">
+                  ⏭️ +1 Frase
+                </button>
+                <button id="btnSpeed" class="btn btn-secondary" title="Velocidad de reproducción">
+                  ⚡ <span id="speedLabel">1x</span>
+                </button>
+                <button id="btnRevealAll" class="btn btn-outline" title="Revelar toda la clase de inmediato para prueba rápida">
+                  ⏩ Revelar Todo
+                </button>
+                <button id="btnReset" class="btn btn-ghost" title="Reiniciar desde el inicio">
+                  🔄
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Barra de Progreso de la Clase -->
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
+          </div>
+
+          <!-- Reproductor de Audio Real de la Clase (Sincronizado) -->
+          <div class="audio-player-card">
+            <div class="audio-player-top">
+              <div class="audio-meta">
+                <span class="audio-wave-icon">🎙️</span>
+                <div>
+                  <strong class="audio-title">Audio Real de la Clase (Modelo IS-LM)</strong>
+                  <span class="audio-desc">Grabación auténtica del profesor • Sincronizada automáticamente con la transcripción</span>
+                </div>
+              </div>
+              <div class="audio-status-tag" id="audioStatusTag">
+                <span class="audio-status-dot" id="audioStatusDot"></span>
+                <span id="audioStatusText">Audio Listo</span>
+              </div>
+            </div>
+            <div class="audio-controls-container">
+              <audio id="classAudio" preload="auto" src="/audio/clase.mp3" controls class="native-audio-bar"></audio>
+            </div>
+            <div class="audio-footer-hint">
+              <span>💡 <em>Puedes presionar Play directamente en el reproductor de audio, pausar o adelantar la barra: la transcripción avanzará sincronizada al instante.</em></span>
+            </div>
+          </div>
+
+          <!-- Feed de Transcripción Progresiva (Módulo TranscriptSource) -->
+          <div class="transcript-feed" id="transcriptFeed">
+            <div class="transcript-empty-state" id="transcriptEmptyState">
+              <div class="empty-icon">🎙️</div>
+              <h3>La clase está por comenzar</h3>
+              <p>Presiona <strong>"Iniciar"</strong> o <strong>"⏭️ +1 Frase"</strong> para hacer avanzar la cátedra en tiempo real, o <strong>"⏩ Revelar Todo"</strong> para una demo inmediata.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel Derecho: Chat Lateral Estudiante (IA Aumentada) -->
+        <div class="chat-panel">
+          <div class="chat-header">
+            <div class="chat-title-group">
+              <div class="chat-avatar">🤖</div>
+              <div>
+                <h3 class="chat-title">Tutor IA en Vivo</h3>
+                <span class="chat-subtitle">Acotado estrictamente al contenido de Macroeconomía</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="btnClearChat" title="Limpiar historial de chat">🧹</button>
+          </div>
+
+          <!-- Botones de Demostración Rápida (Las 4 preguntas de prueba) -->
+          <div class="quick-prompts-bar">
+            <div class="quick-prompts-title">Preguntas de prueba de la demo:</div>
+            <div class="quick-prompts-list">
+              <button class="prompt-chip chip-class" data-prompt="¿Qué es la curva LM?" title="Tema en la transcripción: responde desde lo dicho">
+                <span class="chip-dot dot-green"></span> ¿Qué es la curva LM?
+              </button>
+              <button class="prompt-chip chip-summary" data-prompt="Resume los últimos 2 minutos de la clase." title="Resumen contextual dinámico">
+                <span class="chip-dot dot-blue"></span> Resume los últimos 2 min
+              </button>
+              <button class="prompt-chip chip-course" data-prompt="¿Qué es el modelo de Solow?" title="Tema del curso pero no de esta clase: responde con disclaimer obligatorio">
+                <span class="chip-dot dot-yellow"></span> ¿Qué es el modelo de Solow?
+              </button>
+              <button class="prompt-chip chip-offtopic" data-prompt="¿Cuál es la capital de Francia?" title="Tema fuera del curso: debe ser rechazado">
+                <span class="chip-dot dot-red"></span> ¿Cuál es la capital de Francia?
+              </button>
+            </div>
+          </div>
+
+          <!-- Contenedor de Mensajes de Conversación -->
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-welcome-card">
+              <div class="welcome-header">
+                <span class="welcome-badge">Sesión Activa</span>
+                <span class="welcome-time">Modo Estudiante</span>
+              </div>
+              <h4>¡Hola! Soy tu asistente de aula para Macroeconomía IN4123.</h4>
+              <p>Puedes hacerme preguntas sobre lo que el profesor está explicando en vivo, pedirme que resuma lo visto, o consultar conceptos del programa.</p>
+              <ul class="welcome-hints">
+                <li>✅ <strong>Temas de la clase:</strong> Respuestas basadas en lo expuesto por el docente.</li>
+                <li>⚠️ <strong>Otros temas del curso:</strong> Explicaciones con aviso de que no se ha visto en esta sesión.</li>
+                <li>⛔ <strong>Fuera del curso:</strong> Preguntas ajenas serán amablemente rechazadas.</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Formulario de Entrada de Pregunta -->
+          <div class="chat-input-area">
+            <form id="chatForm" class="chat-form">
+              <textarea 
+                id="chatInput" 
+                class="chat-textarea" 
+                placeholder="Escribe tu duda conceptual o pide un resumen..." 
+                rows="1"
+                required
+              ></textarea>
+              <button type="submit" class="btn btn-primary btn-send" id="btnSendChat" title="Enviar mensaje">
+                <span>Enviar</span> 🚀
+              </button>
+            </form>
+            <div class="chat-footer-privacy">
+              <span>🔒 <strong>Privacidad de aula:</strong> Las preguntas son anónimas para el profesor.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VISTA 2: POST-CLASE (Resumen, Conceptos y Q&A)
+         ========================================== -->
+    <section id="view-post" class="view-panel">
+      <div class="post-layout">
+        
+        <div class="post-banner">
+          <div class="post-banner-info">
+            <span class="tag tag-completed">Clase Finalizada</span>
+            <h2>Informe de Estudio Post-Clase: Modelo IS-LM</h2>
+            <p>Generado automáticamente por el LLM a partir de la transcripción íntegra de la cátedra (4 min 54 s).</p>
+          </div>
+          <button id="btnRegenerateSummary" class="btn btn-secondary">
+            ⚡ Regenerar con LLM
+          </button>
+        </div>
+
+        <div class="post-grid">
+          <!-- Columna Izquierda: Resumen y Conceptos Clave -->
+          <div class="post-main-col">
+            
+            <!-- Tarjeta 1: Resumen Ejecutivo -->
+            <div class="card post-card">
+              <div class="card-header">
+                <h3>📖 Resumen Ejecutivo de la Clase</h3>
+                <span class="badge-pill">Síntesis Integral</span>
+              </div>
+              <div class="card-body" id="postSummaryBody">
+                <div class="loading-placeholder">
+                  <div class="spinner"></div>
+                  <p>Cargando resumen pedagógico estructurado...</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarjeta 2: Conceptos Clave Extraídos -->
+            <div class="card post-card">
+              <div class="card-header">
+                <h3>🔑 Conceptos Clave Extraídos</h3>
+                <span class="badge-pill">Glosario Indexado</span>
+              </div>
+              <div class="card-body">
+                <div class="concepts-grid" id="postConceptsGrid">
+                  <!-- Se llena dinámicamente -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Tarjeta 3: Preguntas de Autoevaluación -->
+            <div class="card post-card">
+              <div class="card-header">
+                <h3>🎯 Preguntas para Autoevaluación</h3>
+                <span class="badge-pill">Estudio Activo</span>
+              </div>
+              <div class="card-body">
+                <ul class="study-questions-list" id="postQuestionsList">
+                  <!-- Se llena dinámicamente -->
+                </ul>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Columna Derecha: Buscador Libre y Transcripción Completa -->
+          <div class="post-side-col">
+            
+            <!-- Buscador Libre con LLM -->
+            <div class="card post-card search-card">
+              <div class="card-header">
+                <h3>🔍 Buscador Temático de la Clase</h3>
+                <span class="badge-pill">Q&A Global</span>
+              </div>
+              <div class="card-body">
+                <p class="search-help">Haz cualquier pregunta libre sobre la clase completa. La IA responderá indexando los momentos exactos del audio.</p>
+                <form id="postSearchForm" class="post-search-form">
+                  <div class="search-input-group">
+                    <input 
+                      type="text" 
+                      id="postSearchInput" 
+                      placeholder="Ej: ¿Qué instrumentos tiene el Banco Central?" 
+                      class="search-input"
+                      required
+                    >
+                    <button type="submit" class="btn btn-primary" id="btnPostSearch">Buscar</button>
+                  </div>
+                </form>
+                
+                <div id="postSearchResult" class="post-search-result hidden">
+                  <!-- Resultado de búsqueda -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Visor de Transcripción Completa -->
+            <div class="card post-card transcript-archive-card">
+              <div class="card-header">
+                <h3>📜 Transcripción Completa Indexada</h3>
+                <input type="text" id="transcriptFilterInput" placeholder="Filtrar por palabra..." class="filter-input">
+              </div>
+              <div class="card-body transcript-archive-body" id="fullTranscriptArchive">
+                <!-- Se llena con las 38 entradas -->
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VISTA 3: RECURRENCIA HISTÓRICA (Memoria Entre Clases)
+         ========================================== -->
+    <section id="view-recurrence" class="view-panel">
+      <div class="recurrence-container">
+        
+        <div class="recurrence-banner">
+          <div class="banner-badge">Diferenciador Fuerte • Memoria Histórica</div>
+          <h2>Recurrencia de Cátedras: Continuidad Pedagógica por Módulo</h2>
+          <p>
+            Al iniciar una nueva clase sobre un tema ya visto antes en el mismo ramo, el sistema incorpora el resumen de la sesión previa como contexto semántico. Esto evita que cada clase empiece "desde cero" y construye una memoria acumulativa del aprendizaje.
+          </p>
+        </div>
+
+        <div class="timeline-wrapper">
+          <div class="timeline-line"></div>
+
+          <!-- Clase 1: Sesión Previa -->
+          <div class="timeline-card-item">
+            <div class="timeline-node done">1</div>
+            <div class="card timeline-card">
+              <div class="timeline-header">
+                <div class="session-meta">
+                  <span class="session-date">📅 20 de Septiembre de 2026</span>
+                  <span class="session-tag tag-past">Clase Anterior #11</span>
+                </div>
+                <h3>Mercados Financieros, Demanda y Oferta de Dinero</h3>
+                <span class="session-prof">Prof. Roberto Celis • Macroeconomía IN4123</span>
+              </div>
+              <div class="card-body">
+                <div class="summary-box">
+                  <h4>Resumen Generado de la Sesión:</h4>
+                  <p>
+                    Se introdujeron los fundamentos del mercado monetario y financiero: la distinción entre ahorro (S) e inversión (I), la preferencia por la liquidez (L) impulsada por el nivel de ingreso, y la oferta monetaria fija (M) determinada por el Banco Central. Se derivó analíticamente la curva LM como la condición de equilibrio monetario L = M, dejando como incógnita la interacción con el mercado real de bienes.
+                  </p>
+                </div>
+                <div class="concepts-chips-row">
+                  <span class="concept-chip">Preferencia por la Liquidez</span>
+                  <span class="concept-chip">Oferta Monetaria M</span>
+                  <span class="concept-chip">Equilibrio de Dinero</span>
+                </div>
+                <div class="analytics-hint">
+                  💬 <strong>Señal analítica de la sesión:</strong> 45% de consultas versaron sobre la diferencia entre ahorro en bancos vs. inversión en capital físico.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Conector de Continuidad Semántica -->
+          <div class="continuity-bridge">
+            <div class="bridge-arrow">⬇️</div>
+            <div class="bridge-card">
+              <span class="bridge-icon">🧠</span>
+              <div>
+                <strong>Inyección de Contexto Histórico:</strong>
+                <span>El resumen y las dudas de la Sesión #11 se pasaron como prompt de contexto previo a la Sesión #12.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Clase 2: Sesión Actual -->
+          <div class="timeline-card-item current">
+            <div class="timeline-node active">2</div>
+            <div class="card timeline-card highlight-card">
+              <div class="timeline-header">
+                <div class="session-meta">
+                  <span class="session-date">📅 27 de Septiembre de 2026</span>
+                  <span class="session-tag tag-current">Clase Actual #12</span>
+                </div>
+                <h3>Integración del Modelo IS-LM y Políticas Macroeconómicas</h3>
+                <span class="session-prof">Prof. Roberto Celis • Macroeconomía IN4123</span>
+              </div>
+              <div class="card-body">
+                
+                <!-- Alerta destacada de recurrencia explícita -->
+                <div class="recurrence-highlight-box">
+                  <div class="recurrence-box-icon">⚡</div>
+                  <div class="recurrence-box-content">
+                    <h4>Resumen Incremental con Memoria de la Clase Anterior:</h4>
+                    <p class="recurrence-quote">
+                      "<em>Tomando como base lo discutido en la clase anterior del 20 de septiembre</em> (donde se introdujo la relación entre oferta monetaria y tasa de interés), en esta sesión se formalizó la curva LM y se integró en un mismo plano cartesiano con la curva IS. Se determinó el equilibrio simultáneo de bienes y dinero \((i^*, Y^*)\) y se analizaron los efectos expansivos y restrictivos de las políticas fiscales y monetarias, resolviendo la incógnita planteada en la sesión previa."
+                    </p>
+                  </div>
+                </div>
+
+                <div class="concepts-chips-row">
+                  <span class="concept-chip highlight">Curva IS</span>
+                  <span class="concept-chip highlight">Curva LM</span>
+                  <span class="concept-chip highlight">Equilibrio IS-LM</span>
+                  <span class="concept-chip highlight">Política Fiscal & Monetaria</span>
+                </div>
+
+                <div class="recurrence-footer">
+                  <span class="badge-pill">✅ Continuidad Verificada</span>
+                  <span class="text-muted">El modelo compara la progresión temática entre ambas sesiones sin necesidad de re-entrenamiento.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==========================================
+         VISTA 4: DASHBOARD DEL PROFESOR (Analítica Anónima)
+         ========================================== -->
+    <section id="view-dashboard" class="view-panel">
+      <div class="dashboard-container">
+        
+        <div class="dashboard-banner">
+          <div class="banner-badge">Analítica Docente • Capa 2 (100% Anónima)</div>
+          <h2>Panel de Comprensión de Cátedra en Tiempo Real</h2>
+          <p>
+            Información agregada y anónima generada a partir de las consultas espontáneas de los estudiantes durante la clase. Permite al docente detectar puntos ciegos sin invadir la privacidad de los alumnos.
+          </p>
+        </div>
+
+        <!-- Alerta de Comprensión Inmediata -->
+        <div class="alert-card alert-info">
+          <div class="alert-icon">💡</div>
+          <div class="alert-content">
+            <h3>Alerta de Comprensión (Últimos 10 minutos de clase)</h3>
+            <p class="alert-main-text">
+              <strong>42% de las preguntas de los estudiantes</strong> se concentraron en la definición y pendiente positiva de la <strong>Curva LM</strong> (mercado de dinero).
+            </p>
+            <div class="alert-recommendation">
+              <strong>🎯 Sugerencia didáctica para el profesor:</strong> Conviene dedicar 3 minutos a reforzar por qué un aumento del producto nacional (PIB) genera mayor demanda transaccional de dinero y cómo eso presiona al alza la tasa de interés en el mercado financiero.
+            </div>
+          </div>
+        </div>
+
+        <!-- Métricas Rápidas -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <span class="stat-value">48</span>
+            <span class="stat-label">Estudiantes Conectados</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">42</span>
+            <span class="stat-label">Preguntas Totales Realizadas</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">1.8 min</span>
+            <span class="stat-label">Tiempo Medio Entre Consultas</span>
+          </div>
+          <div class="stat-card highlight-stat">
+            <span class="stat-value">Capa 2</span>
+            <span class="stat-label">Privacidad: Cero Datos Personales Visibles</span>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          
+          <!-- Gráfico de Barras: Distribución Temática de Preguntas -->
+          <div class="card dashboard-card">
+            <div class="card-header">
+              <h3>📊 Distribución Temática de Dudas</h3>
+              <span class="badge-pill">Porcentaje Agregado</span>
+            </div>
+            <div class="card-body">
+              <div class="bar-chart-container" id="topicsBarChart">
+                <!-- Se llena dinámicamente con las barras -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Línea de Tiempo: Densidad de Consultas durante la Clase -->
+          <div class="card dashboard-card">
+            <div class="card-header">
+              <h3>⏱️ Densidad de Dudas a lo Largo de la Cátedra</h3>
+              <span class="badge-pill">Consultas por Minuto</span>
+            </div>
+            <div class="card-body">
+              <div class="timeline-density-chart" id="timelineDensityChart">
+                <!-- Se llena dinámicamente -->
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Principios de Diseño Ético y Privacidad -->
+        <div class="card privacy-summary-card">
+          <div class="card-header">
+            <h3>🛡️ Arquitectura de Privacidad por Capas (Feedback Sección 2.5)</h3>
+          </div>
+          <div class="card-body privacy-body">
+            <div class="privacy-pillar">
+              <div class="pillar-icon">🔒</div>
+              <h4>Capa 1: Registro Restringido</h4>
+              <p>Las consultas crudas quedan resguardadas únicamente para soporte técnico o prevención de abusos por parte de TI Central. Jamás accesibles al docente.</p>
+            </div>
+            <div class="privacy-pillar">
+              <div class="pillar-icon">👥</div>
+              <h4>Capa 2: Agregación Anónima</h4>
+              <p>Lo único visible para el profesor son métricas grupales de comprensión. Ningún nombre o identificador de estudiante es expuesto en ningún momento.</p>
+            </div>
+            <div class="privacy-pillar">
+              <div class="pillar-icon">⚡</div>
+              <h4>Principio de Cero Fricción</h4>
+              <p>El profesor no necesita cambiar su forma de dar clases ni operar software complejo. El panel genera valor pasivo opcional.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Modal de Configuración del Alcance del Curso -->
+  <div class="modal-overlay hidden" id="scopeModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="modal-icon">📚</span>
+          <div>
+            <h3>Contenido Permitido del Curso (Macroeconomía IN4123)</h3>
+            <span class="modal-sub">Configuración desacoplada de la lógica del chat</span>
+          </div>
+        </div>
+        <button class="btn btn-ghost modal-close" id="btnCloseScopeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-info">
+          Esta configuración define los límites de conocimiento del tutor IA. Cualquier pregunta fuera de este alcance es rechazada automáticamente.
+        </p>
+
+        <div class="units-config-list" id="unitsConfigList">
+          <!-- Unidades cargadas desde /api/config -->
+        </div>
+
+        <div class="modal-actions-note">
+          <span>💡 <em>Puedes activar o desactivar unidades en vivo para comprobar cómo el chatbot amplía o restringe su cobertura temática sin modificar una sola línea de código.</em></span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveScope">Guardar Cambios de Alcance</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts Modulares -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

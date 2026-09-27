@@ -1,0 +1,82 @@
+Archivo de audio
+Modelo IS-LM - Explicado para principiantes!.mp3
+Transcripción
+00:00:00
+En el modelo IS-LM se tienen en cuenta la curva IS y la curva LM en un solo gráfico para estudiar el estado macroeconómico de un país.
+00:00:12
+En el gráfico, el punto en donde se cruzan ambas curvas es el punto de equilibrio, en donde el mercado de bienes, así como también el mercado de dinero, se encuentran en equilibrio, a un tipo de interés I y PIB-Y.
+00:00:25
+En la macroeconomía,
+00:00:29
+estudiamos la situación de la economía de un país entero, y con el modelo ISLM, realizamos el análisis a partir de la situación del mercado de bienes y de dinero para decidir las políticas fiscales y monetarias a tomar, y evaluar sus efectos.
+00:00:47
+El nombre ISLM viene de las palabras en inglés Investment and Savings, que significan inversiones y ahorros, y Liquidity Preference and Money Supply,
+00:00:58
+que significan preferencia por la liquidez o demanda de dinero y oferta de dinero.
+00:01:06
+Las inversiones son las compras de bienes que contribuyen al aumento de la productividad.
+00:01:11
+Y los ahorros son el monto de dinero que las personas y empresas deciden no invertir.
+00:01:17
+Y al mismo tiempo, la fuente del capital a ser invertido por alguien, ya que las personas y empresas invierten su ahorro o el ahorro de otros a través de los bancos.
+00:01:28
+La curva IS es la que muestra las combinaciones del tipo de interés y PIB con las que el mercado de bienes se encuentra en equilibrio.
+00:01:40
+La preferencia por la liquidez es literalmente lo que la gente prefiere tener en forma de dinero, o simplemente demanda de dinero.
+00:01:50
+Y la oferta de dinero es el monto de dinero que el banco central decide disponer en circulación.
+00:01:57
+La curva LM es la que muestra las combinaciones del tipo de interés y PIB con las que el mercado de dinero se encuentra en equilibrio.
+00:02:08
+Ahora veamos cómo se relacionan los mercados de bienes y de dinero.
+00:02:13
+Para el mercado de bienes tenemos IS, y para el mercado de dinero tenemos LM.
+00:02:20
+A partir del monto de las inversiones Y,
+00:02:23
+Se define el nivel de producción y la renta de un país, es decir, el PIB.
+00:02:30
+El PIB refleja las rentas y los consumos de las personas, lo que define el nivel de la demanda de dinero, L.
+00:02:39
+A mayor PIB habrá mayor demanda de dinero, y a menor PIB, menor demanda.
+00:02:46
+La oferta de dinero, M, es decidida por el Banco Central.
+00:02:51
+La relación entre la demanda de dinero y la oferta de dinero, como sabrás, define el precio del dinero, es decir, el tipo de interés Y.
+00:03:03
+El tipo de interés afecta al nivel de inversiones Y y de ahorro S.
+00:03:08
+Cuando el tipo de interés es elevado, se reducen las inversiones porque simplemente resulta caro obtener dinero, e incentiva el ahorro.
+00:03:18
+Al contrario,
+00:03:19
+Cuando el tipo de interés es reducido, aumentan las inversiones, lo que vuelve a afectar al PIB.
+00:03:26
+Y así sucesiva e infinitamente.
+00:03:31
+Ante las diferentes situaciones en el mercado de bienes, el gobierno puede intervenir a través de las políticas fiscales, expansivas o restrictivas, manejando las recaudaciones de impuestos y los gastos públicos.
+00:03:44
+Y ante las situaciones en el mercado de dinero, el Banco Central interviene
+00:03:49
+través de las políticas monetarias expansivas o restrictivas, manejando las tasas de descuento, el encaje legal bancario y las operaciones de mercado abierto.
+00:04:03
+En síntesis, la curva IS muestra las combinaciones del tipo de interés y el PIB con las que el mercado de bienes se encuentra en equilibrio.
+00:04:14
+Y la curva LM
+00:04:16
+muestra las combinaciones del tipo de interés y el PIB con las que el mercado de dinero se encuentra en equilibrio.
+00:04:25
+El modelo ISLM muestra la combinación del tipo de interés y el PIB con la que tanto el mercado de bienes como el de dinero se encuentran en equilibrio al mismo tiempo.
+00:04:36
+Y es utilizado para analizar el estado macroeconómico de un país y decidir las políticas fiscales y monetarias a aplicarse.
+00:04:44
+Y luego,
+00:04:45
+estudiar sus efectos en la economía.
+00:04:51
+Esto fue el modelo ISLM.
+00:04:54
+Muchas gracias.
+
+
+

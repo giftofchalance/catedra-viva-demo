@@ -1,0 +1,376 @@
+/**
+ * Coordinador Principal de la Aplicación Cliente (Cátedra Viva)
+ * 
+ * Integra:
+ * - SimulatedTranscriptSource (implementación de la interfaz TranscriptSource con sincronización bidireccional de audio real)
+ * - ChatManager (chat en vivo acotado con IA y renderizado matemático KaTeX)
+ * - PostClassManager (resumen post-clase, conceptos clave y buscador con KaTeX)
+ * - DashboardManager (analítica anónima para el profesor)
+ * - Modal de Gestión de Alcance Curricular
+ */
+
+import { SimulatedTranscriptSource } from './modules/transcriptSource.js';
+import { ChatManager } from './modules/chatManager.js';
+import { PostClassManager } from './modules/postClassManager.js';
+import { DashboardManager } from './modules/dashboardManager.js';
+
+class App {
+  constructor() {
+    this.transcriptSource = null;
+    this.chatManager = null;
+    this.postClassManager = null;
+    this.dashboardManager = null;
+
+    // Elementos del DOM
+    this.feedEl = document.getElementById('transcriptFeed');
+    this.emptyStateEl = document.getElementById('transcriptEmptyState');
+    this.timeDisplayEl = document.getElementById('simTimeDisplay');
+    this.progressBarEl = document.getElementById('progressBar');
+    this.statusPillEl = document.getElementById('liveStatusPill');
+    this.playBtn = document.getElementById('btnPlayPause');
+    this.playIcon = document.getElementById('playIcon');
+    this.playText = document.getElementById('playText');
+    this.stepBtn = document.getElementById('btnStepNext');
+    this.speedBtn = document.getElementById('btnSpeed');
+    this.speedLabel = document.getElementById('speedLabel');
+    this.revealAllBtn = document.getElementById('btnRevealAll');
+    this.resetBtn = document.getElementById('btnReset');
+    
+    // Reproductor de Audio Real
+    this.audioEl = document.getElementById('classAudio');
+    this.audioStatusTag = document.getElementById('audioStatusTag');
+    this.audioStatusDot = document.getElementById('audioStatusDot');
+    this.audioStatusText = document.getElementById('audioStatusText');
+
+    this.currentSpeed = 1;
+
+    this.init();
+  }
+
+  async init() {
+    this.setupTabs();
+    this.setupModal();
+
+    // 1. Cargar datos de la clase desde el servidor
+    try {
+      const response = await fetch('/api/transcript');
+      const data = await response.json();
+      const entries = data.entries || [];
+
+      // 2. Inicializar el módulo de avance de la transcripción (TranscriptSource)
+      this.transcriptSource = new SimulatedTranscriptSource(entries, { stepIntervalMs: 2500 });
+
+      // Conectar automáticamente el elemento de audio para sincronización bidireccional
+      if (this.audioEl) {
+        this.transcriptSource.attachAudio(this.audioEl);
+        this.setupAudioListeners();
+      }
+
+      // Suscribirse a eventos de la transcripción
+      this.transcriptSource.subscribe((event, payload) => {
+        this.handleTranscriptEvent(event, payload);
+      });
+
+      // 3. Inicializar el Chat en Vivo (acoplado únicamente a la interfaz de TranscriptSource)
+      this.chatManager = new ChatManager({
+        transcriptSource: this.transcriptSource,
+        chatMessagesEl: document.getElementById('chatMessages'),
+        chatFormEl: document.getElementById('chatForm'),
+        chatInputEl: document.getElementById('chatInput')
+      });
+
+      // 4. Inicializar Post-Clase y Dashboard
+      this.postClassManager = new PostClassManager();
+      this.dashboardManager = new DashboardManager();
+
+      // 5. Vincular controles de la interfaz
+      this.bindControls();
+
+    } catch (err) {
+      console.error('Error inicializando la aplicación:', err);
+      alert('Error conectando con el backend local. Asegúrate de que el servidor Node/Express esté activo.');
+    }
+  }
+
+  setupAudioListeners() {
+    if (!this.audioEl) return;
+
+    this.audioEl.addEventListener('play', () => {
+      if (this.audioStatusDot) this.audioStatusDot.classList.add('playing');
+      if (this.audioStatusText) this.audioStatusText.textContent = 'Reproduciendo Audio';
+    });
+
+    this.audioEl.addEventListener('pause', () => {
+      if (this.audioStatusDot) this.audioStatusDot.classList.remove('playing');
+      if (this.audioStatusText) this.audioStatusText.textContent = 'Audio Pausado';
+    });
+
+    this.audioEl.addEventListener('ended', () => {
+      if (this.audioStatusDot) this.audioStatusDot.classList.remove('playing');
+      if (this.audioStatusText) this.audioStatusText.textContent = 'Audio Finalizado';
+    });
+  }
+
+  /**
+   * Navegación por pestañas de la SPA
+   */
+  setupTabs() {
+    const tabs = document.querySelectorAll('.nav-tab');
+    const panels = document.querySelectorAll('.view-panel');
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const targetId = tab.getAttribute('data-tab');
+
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('active'));
+
+        tab.classList.add('active');
+        const activePanel = document.getElementById(`view-${targetId}`);
+        if (activePanel) {
+          activePanel.classList.add('active');
+        }
+
+        // Carga diferida según la vista activa
+        if (targetId === 'post' && this.postClassManager) {
+          this.postClassManager.loadSummary(false);
+        } else if (targetId === 'dashboard' && this.dashboardManager) {
+          this.dashboardManager.loadStats();
+        }
+      });
+    });
+  }
+
+  /**
+   * Vincula los botones de control de la simulación
+   */
+  bindControls() {
+    this.playBtn.addEventListener('click', () => {
+      this.transcriptSource.togglePlay();
+    });
+
+    this.stepBtn.addEventListener('click', () => {
+      this.transcriptSource.revealNext();
+    });
+
+    this.speedBtn.addEventListener('click', () => {
+      if (this.currentSpeed === 1) this.currentSpeed = 2;
+      else if (this.currentSpeed === 2) this.currentSpeed = 5;
+      else this.currentSpeed = 1;
+
+      this.speedLabel.textContent = `${this.currentSpeed}x`;
+      this.transcriptSource.setSpeed(this.currentSpeed);
+    });
+
+    this.revealAllBtn.addEventListener('click', () => {
+      this.transcriptSource.revealAll();
+    });
+
+    this.resetBtn.addEventListener('click', () => {
+      this.transcriptSource.reset();
+    });
+  }
+
+  /**
+   * Manejador central de eventos emitidos por TranscriptSource
+   */
+  handleTranscriptEvent(event, data) {
+    const state = data?.state || (data?.currentIndex !== undefined ? data : this.transcriptSource.getState());
+
+    switch (event) {
+      case 'lineRevealed': {
+        const entry = data.entry;
+        if (entry) {
+          this.appendTranscriptLine(entry);
+        }
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'syncJump': {
+        const { oldIndex, targetIndex, revealedEntries } = data;
+        // Si retrocedió en la barra de tiempo del audio, re-renderizar hasta esa posición
+        if (targetIndex < oldIndex) {
+          this.feedEl.innerHTML = '';
+          if (revealedEntries.length === 0) {
+            this.feedEl.appendChild(this.emptyStateEl);
+            this.emptyStateEl.style.display = 'block';
+          } else {
+            revealedEntries.forEach(entry => this.appendTranscriptLine(entry, false));
+          }
+        } else {
+          // Si avanzó hacia adelante, agregar las líneas pendientes
+          for (let i = oldIndex; i < targetIndex; i++) {
+            if (this.transcriptSource.entries[i]) {
+              this.appendTranscriptLine(this.transcriptSource.entries[i]);
+            }
+          }
+        }
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'clockTick': {
+        // Solo actualiza reloj y barra de progreso sin tocar el DOM del texto
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'stateChange': {
+        this.updatePlaybackUI(state);
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'complete': {
+        this.statusPillEl.className = 'live-pill';
+        this.statusPillEl.style.backgroundColor = '#DCFCE7';
+        this.statusPillEl.style.color = '#15803D';
+        this.statusPillEl.innerHTML = '🏁 CLASE FINALIZADA';
+        this.updatePlaybackUI(state);
+        break;
+      }
+
+      case 'reset': {
+        this.feedEl.innerHTML = '';
+        this.feedEl.appendChild(this.emptyStateEl);
+        this.emptyStateEl.style.display = 'block';
+        this.statusPillEl.className = 'live-pill';
+        this.statusPillEl.style.backgroundColor = '#FEE2E2';
+        this.statusPillEl.style.color = '#B91C1C';
+        this.statusPillEl.innerHTML = '<span class="pulse-ring"></span><span class="status-text">EN VIVO</span>';
+        this.updatePlaybackUI(state);
+        this.updateTimeAndProgress(state);
+        break;
+      }
+    }
+  }
+
+  appendTranscriptLine(entry, scroll = true) {
+    if (this.emptyStateEl) {
+      this.emptyStateEl.style.display = 'none';
+    }
+
+    // Evitar duplicar elementos ya existentes en el DOM
+    if (document.getElementById(`transcript-item-${entry.id}`)) {
+      return;
+    }
+
+    // Remover resaltado previo
+    const existing = this.feedEl.querySelectorAll('.transcript-item.highlight-new');
+    existing.forEach(el => el.classList.remove('highlight-new'));
+
+    // Crear bloque visual del profesor
+    const item = document.createElement('div');
+    item.className = 'transcript-item highlight-new';
+    item.id = `transcript-item-${entry.id}`;
+    item.innerHTML = `
+      <div class="transcript-meta">
+        <span class="speaker-badge">👨‍🏫 ${this.escapeHtml(entry.speaker)}</span>
+        <span class="timestamp-badge">⏱️ ${this.escapeHtml(entry.timestamp)}</span>
+      </div>
+      <div class="transcript-text">${this.escapeHtml(entry.text)}</div>
+    `;
+
+    this.feedEl.appendChild(item);
+    if (scroll) {
+      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  updateTimeAndProgress(state) {
+    if (!state) return;
+    this.timeDisplayEl.textContent = `${state.currentTimestamp} / 00:04:54`;
+    this.progressBarEl.style.width = `${state.progressPercentage}%`;
+  }
+
+  updatePlaybackUI(state) {
+    if (!state) return;
+    if (state.isPlaying) {
+      this.playIcon.textContent = '⏸';
+      this.playText.textContent = 'Pausar';
+      this.playBtn.classList.replace('btn-primary', 'btn-secondary');
+    } else {
+      this.playIcon.textContent = '▶';
+      this.playText.textContent = state.currentIndex > 0 ? 'Reanudar' : 'Iniciar';
+      this.playBtn.classList.replace('btn-secondary', 'btn-primary');
+    }
+  }
+
+  /**
+   * Configuración del modal de syllabus / contenido permitido
+   */
+  setupModal() {
+    const badgeBtn = document.getElementById('courseBadgeBtn');
+    const modal = document.getElementById('scopeModal');
+    const closeBtn = document.getElementById('btnCloseScopeModal');
+    const saveBtn = document.getElementById('btnSaveScope');
+    const unitsList = document.getElementById('unitsConfigList');
+
+    badgeBtn.addEventListener('click', async () => {
+      modal.classList.remove('hidden');
+      try {
+        const res = await fetch('/api/config');
+        const config = await res.json();
+        
+        unitsList.innerHTML = '';
+        config.units.forEach(u => {
+          const isActive = config.activeUnitNumbers.includes(u.unitNumber);
+          const item = document.createElement('label');
+          item.className = `unit-config-item ${isActive ? 'active' : ''}`;
+          item.innerHTML = `
+            <input type="checkbox" value="${u.unitNumber}" ${isActive ? 'checked' : ''}>
+            <div class="unit-config-content">
+              <h4>${u.title}</h4>
+              <p>${u.summary}</p>
+            </div>
+          `;
+          unitsList.appendChild(item);
+        });
+      } catch (e) {
+        console.error('Error cargando config:', e);
+      }
+    });
+
+    closeBtn.addEventListener('click', () => {
+      modal.classList.add('hidden');
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const checked = Array.from(unitsList.querySelectorAll('input:checked')).map(cb => Number(cb.value));
+      if (checked.length === 0) {
+        alert('Debe haber al menos 1 unidad curricular activa.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/config/active-units', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activeUnitNumbers: checked })
+        });
+        if (res.ok) {
+          modal.classList.add('hidden');
+          alert(`✅ Alcance actualizado exitosamente: Unidades activas [${checked.join(', ')}].\nEl tutor IA ahora responderá con estos nuevos límites.`);
+        }
+      } catch (err) {
+        console.error('Error actualizando unidades:', err);
+      }
+    });
+  }
+
+  escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+}
+
+// Iniciar aplicación al cargar el DOM
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new App();
+});
