@@ -105,26 +105,20 @@
             <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
           </div>
 
-          <!-- Reproductor de Audio Real de la Clase (Sincronizado) -->
+          <!-- Reproductor de Audio Real Sincronizado (Diseño Slim) -->
           <div class="audio-player-card">
-            <div class="audio-player-top">
-              <div class="audio-meta">
-                <span class="audio-wave-icon">🎙️</span>
-                <div>
-                  <strong class="audio-title">Audio Real de la Clase (Modelo IS-LM)</strong>
-                  <span class="audio-desc">Grabación auténtica del profesor • Sincronizada automáticamente con la transcripción</span>
-                </div>
+            <div class="audio-player-row">
+              <div class="audio-info-badge">
+                <span class="audio-icon">🎙️</span>
+                <span class="audio-title">Audio Cátedra</span>
+                <span class="audio-status-tag" id="audioStatusTag">
+                  <span class="audio-status-dot" id="audioStatusDot"></span>
+                  <span id="audioStatusText">Sincronizado</span>
+                </span>
               </div>
-              <div class="audio-status-tag" id="audioStatusTag">
-                <span class="audio-status-dot" id="audioStatusDot"></span>
-                <span id="audioStatusText">Audio Listo</span>
+              <div class="audio-controls-container">
+                <audio id="classAudio" preload="auto" src="/audio/clase.mp3" controls class="native-audio-bar"></audio>
               </div>
-            </div>
-            <div class="audio-controls-container">
-              <audio id="classAudio" preload="auto" src="/audio/clase.mp3" controls class="native-audio-bar"></audio>
-            </div>
-            <div class="audio-footer-hint">
-              <span>💡 <em>Puedes presionar Play directamente en el reproductor de audio, pausar o adelantar la barra: la transcripción avanzará sincronizada al instante.</em></span>
             </div>
           </div>
 
@@ -133,7 +127,7 @@
             <div class="transcript-empty-state" id="transcriptEmptyState">
               <div class="empty-icon">🎙️</div>
               <h3>La clase está por comenzar</h3>
-              <p>Presiona <strong>"Iniciar"</strong> o <strong>"⏭️ +1 Frase"</strong> para hacer avanzar la cátedra en tiempo real, o <strong>"⏩ Revelar Todo"</strong> para una demo inmediata.</p>
+              <p>Presiona <strong>"Iniciar"</strong> o reproduce el audio para hacer avanzar la cátedra en tiempo real, o <strong>"⏩ Revelar Todo"</strong> para una demo inmediata.</p>
             </div>
           </div>
         </div>
@@ -145,45 +139,39 @@
               <div class="chat-avatar">🤖</div>
               <div>
                 <h3 class="chat-title">Tutor IA en Vivo</h3>
-                <span class="chat-subtitle">Acotado estrictamente al contenido de Macroeconomía</span>
+                <span class="chat-subtitle">Acotado al contenido de Macroeconomía</span>
               </div>
             </div>
-            <button class="btn btn-ghost btn-sm" id="btnClearChat" title="Limpiar historial de chat">🧹</button>
+            <button class="btn btn-ghost btn-sm" id="btnClearChat" title="Limpiar historial de chat">🧹 Limpiar</button>
           </div>
 
           <!-- Botones de Demostración Rápida (Las 4 preguntas de prueba) -->
           <div class="quick-prompts-bar">
-            <div class="quick-prompts-title">Preguntas de prueba de la demo:</div>
+            <span class="quick-prompts-title">Pruebas rápidas:</span>
             <div class="quick-prompts-list">
               <button class="prompt-chip chip-class" data-prompt="¿Qué es la curva LM?" title="Tema en la transcripción: responde desde lo dicho">
-                <span class="chip-dot dot-green"></span> ¿Qué es la curva LM?
+                <span class="chip-dot dot-green"></span> Curva LM
               </button>
               <button class="prompt-chip chip-summary" data-prompt="Resume los últimos 2 minutos de la clase." title="Resumen contextual dinámico">
-                <span class="chip-dot dot-blue"></span> Resume los últimos 2 min
+                <span class="chip-dot dot-blue"></span> Resumen 2 min
               </button>
               <button class="prompt-chip chip-course" data-prompt="¿Qué es el modelo de Solow?" title="Tema del curso pero no de esta clase: responde con disclaimer obligatorio">
-                <span class="chip-dot dot-yellow"></span> ¿Qué es el modelo de Solow?
+                <span class="chip-dot dot-yellow"></span> Modelo de Solow
               </button>
               <button class="prompt-chip chip-offtopic" data-prompt="¿Cuál es la capital de Francia?" title="Tema fuera del curso: debe ser rechazado">
-                <span class="chip-dot dot-red"></span> ¿Cuál es la capital de Francia?
+                <span class="chip-dot dot-red"></span> Capital de Francia
               </button>
             </div>
           </div>
 
           <!-- Contenedor de Mensajes de Conversación -->
           <div class="chat-messages" id="chatMessages">
-            <div class="chat-welcome-card">
+            <div class="chat-welcome-card" id="chatWelcomeCard">
               <div class="welcome-header">
-                <span class="welcome-badge">Sesión Activa</span>
-                <span class="welcome-time">Modo Estudiante</span>
+                <span class="welcome-badge">🤖 Tutor IA Conectado</span>
+                <span class="welcome-time">IN4123</span>
               </div>
-              <h4>¡Hola! Soy tu asistente de aula para Macroeconomía IN4123.</h4>
-              <p>Puedes hacerme preguntas sobre lo que el profesor está explicando en vivo, pedirme que resuma lo visto, o consultar conceptos del programa.</p>
-              <ul class="welcome-hints">
-                <li>✅ <strong>Temas de la clase:</strong> Respuestas basadas en lo expuesto por el docente.</li>
-                <li>⚠️ <strong>Otros temas del curso:</strong> Explicaciones con aviso de que no se ha visto en esta sesión.</li>
-                <li>⛔ <strong>Fuera del curso:</strong> Preguntas ajenas serán amablemente rechazadas.</li>
-              </ul>
+              <p>Pregunta sobre lo que el profesor explica en vivo, pide resúmenes o consulta conceptos del programa.</p>
             </div>
           </div>
 

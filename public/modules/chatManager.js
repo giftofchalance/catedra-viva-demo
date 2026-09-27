@@ -135,6 +135,11 @@ export class ChatManager {
   }
 
   appendUserMessage(text) {
+    const welcomeCard = document.getElementById('chatWelcomeCard');
+    if (welcomeCard) {
+      welcomeCard.classList.add('hidden');
+    }
+
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const row = document.createElement('div');
     row.className = 'message-row user';
@@ -160,6 +165,7 @@ export class ChatManager {
     this.messagesContainer.appendChild(row);
     this.renderMath(row);
     this.scrollToBottom();
+    setTimeout(() => this.scrollToBottom(), 80);
   }
 
   /**
@@ -291,13 +297,12 @@ export class ChatManager {
 
   clearChat() {
     this.messagesContainer.innerHTML = `
-      <div class="chat-welcome-card">
+      <div class="chat-welcome-card" id="chatWelcomeCard">
         <div class="welcome-header">
-          <span class="welcome-badge">Sesión Activa</span>
-          <span class="welcome-time">Modo Estudiante</span>
+          <span class="welcome-badge">🤖 Tutor IA Conectado</span>
+          <span class="welcome-time">IN4123</span>
         </div>
-        <h4>Historial reiniciado.</h4>
-        <p>Escribe cualquier duda conceptual sobre el modelo IS-LM o los temas del programa.</p>
+        <p>Historial reiniciado. Escribe cualquier duda conceptual o consulta el programa.</p>
       </div>
     `;
   }
