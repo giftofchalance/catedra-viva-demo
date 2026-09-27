@@ -274,7 +274,11 @@ class App {
 
     this.feedEl.appendChild(item);
     if (scroll) {
-      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      // Solo auto-desplazar el feed si el usuario está cerca del fondo (no jala la pantalla completa)
+      const isNearBottom = (this.feedEl.scrollHeight - this.feedEl.scrollTop - this.feedEl.clientHeight) < 180;
+      if (isNearBottom) {
+        this.feedEl.scrollTo({ top: this.feedEl.scrollHeight, behavior: 'smooth' });
+      }
     }
   }
 
