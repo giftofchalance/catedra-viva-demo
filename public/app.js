@@ -11,6 +11,7 @@
 
 import { SimulatedTranscriptSource } from './modules/transcriptSource.js';
 import { LiveSpeechTranscriptSource } from './modules/liveSpeechTranscriptSource.js';
+import { AiAudioTranscriptSource } from './modules/aiAudioTranscriptSource.js';
 import { ChatManager } from './modules/chatManager.js';
 import { PostClassManager } from './modules/postClassManager.js';
 import { DashboardManager } from './modules/dashboardManager.js';
@@ -20,7 +21,8 @@ class App {
     this.transcriptSource = null;
     this.simulatedSource = null;
     this.liveSpeechSource = null;
-    this.activeSource = 'recorded'; // 'recorded' | 'mic'
+    this.aiAudioSource = null;
+    this.activeSource = 'recorded'; // 'recorded' | 'ai-audio' | 'mic'
     this.chatManager = null;
     this.postClassManager = null;
     this.dashboardManager = null;
@@ -36,9 +38,13 @@ class App {
 
     // Selector de modo de audio
     this.btnModeRecorded = document.getElementById('btnModeRecorded');
+    this.btnModeAiAudio = document.getElementById('btnModeAiAudio');
     this.btnModeMic = document.getElementById('btnModeMic');
     this.recordedSimControls = document.getElementById('recordedSimControls');
     this.audioPlayerCard = document.getElementById('audioPlayerCard');
+    this.aiAudioNotice = document.getElementById('aiAudioNotice');
+    this.aiAudioSpin = document.getElementById('aiAudioSpin');
+    this.aiAudioNoticeText = document.getElementById('aiAudioNoticeText');
 
     // Controles de Simulación (Modo Grabado)
     this.playBtn = document.getElementById('btnPlayPause');
@@ -83,16 +89,20 @@ class App {
       const data = await response.json();
       const entries = data.entries || [];
 
-      // 2. Inicializar ambas fuentes de transcripción (Simulada y Micrófono Real)
+      // 2. Inicializar las tres fuentes de transcripción
       this.simulatedSource = new SimulatedTranscriptSource(entries, { stepIntervalMs: 2500 });
       this.liveSpeechSource = new LiveSpeechTranscriptSource({ lang: 'es-CL' });
+      this.aiAudioSource = new AiAudioTranscriptSource({ chunkDurationSeconds: 15 });
 
-      // Fuente activa inicial: Grabada
+      // Fuente activa inicial: Grabada (pre-sincronizada)
       this.transcriptSource = this.simulatedSource;
+      this.simulatedSource.enabled = true;
+      this.aiAudioSource.enabled = false;
 
       // Conectar automáticamente el elemento de audio para sincronización bidireccional
       if (this.audioEl) {
         this.simulatedSource.attachAudio(this.audioEl);
+        this.aiAudioSource.attachAudio(this.audioEl);
         this.setupAudioListeners();
       }
 
@@ -100,6 +110,13 @@ class App {
       this.simulatedSource.subscribe((event, payload) => {
         if (this.activeSource === 'recorded') {
           this.handleTranscriptEvent(event, payload);
+        }
+      });
+
+      // Suscribirse a eventos de la IA transcribiendo el audio MP3
+      this.aiAudioSource.subscribe((event, payload) => {
+        if (this.activeSource === 'ai-audio') {
+          this.handleAiAudioEvent(event, payload);
         }
       });
 
@@ -212,11 +229,14 @@ class App {
   }
 
   /**
-   * Configura el selector de modo (Audio Grabado vs Micrófono STT)
+   * Configura el selector de modo (Audio Grabado vs IA Transcribiendo MP3 vs Micrófono STT)
    */
   setupModeSwitcher() {
     if (this.btnModeRecorded) {
       this.btnModeRecorded.addEventListener('click', () => this.switchMode('recorded'));
+    }
+    if (this.btnModeAiAudio) {
+      this.btnModeAiAudio.addEventListener('click', () => this.switchMode('ai-audio'));
     }
     if (this.btnModeMic) {
       this.btnModeMic.addEventListener('click', () => this.switchMode('mic'));
@@ -234,14 +254,19 @@ class App {
   }
 
   /**
-   * Cambia dinámicamente entre la fuente grabada y la fuente de micrófono en vivo
+   * Cambia dinámicamente entre las tres fuentes de transcripción:
+   * 1. 'recorded' (Audio con transcripción pre-sincronizada)
+   * 2. 'ai-audio' (Gemini cortando fragmentos de 15s del MP3 en tiempo real)
+   * 3. 'mic' (Voz hablada capturada por micrófono STT)
    */
   switchMode(targetMode) {
     if (this.activeSource === targetMode) return;
     this.activeSource = targetMode;
 
     if (targetMode === 'mic') {
-      // Pausar audio grabado si estuviera sonando
+      // 1. Desactivar audio MP3 y fuentes de archivo
+      this.simulatedSource.enabled = false;
+      this.aiAudioSource.enabled = false;
       if (this.audioEl && !this.audioEl.paused) {
         this.audioEl.pause();
       }
@@ -258,10 +283,12 @@ class App {
       // Actualizar botones de modo
       this.btnModeMic.classList.add('active');
       this.btnModeRecorded.classList.remove('active');
+      if (this.btnModeAiAudio) this.btnModeAiAudio.classList.remove('active');
 
-      // Ocultar controles de audio grabado y mostrar controles de micrófono
+      // Ocultar controles de audio y mostrar controles de micrófono
       if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'none';
       if (this.recordedSimControls) this.recordedSimControls.style.display = 'none';
+      if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'none';
       if (this.micLiveCard) this.micLiveCard.style.display = 'flex';
 
       // Actualizar títulos
@@ -287,11 +314,71 @@ class App {
         micEntries.forEach(entry => this.appendTranscriptLine(entry, false));
       }
 
-    } else {
-      // Detener micrófono si estuviera escuchando
+    } else if (targetMode === 'ai-audio') {
+      // 2. Modo IA Transcribiendo MP3 en Vivo con Gemini
       this.liveSpeechSource.stopListening();
+      this.simulatedSource.enabled = false;
+      if (this.simulatedSource.isPlaying) {
+        this.simulatedSource.pause();
+      }
+      this.aiAudioSource.enabled = true;
 
-      // Restaurar fuente simulada
+      // Conectar AiAudio al chat
+      this.transcriptSource = this.aiAudioSource;
+      if (this.chatManager) {
+        this.chatManager.transcriptSource = this.aiAudioSource;
+      }
+
+      // Actualizar botones de modo
+      if (this.btnModeAiAudio) this.btnModeAiAudio.classList.add('active');
+      this.btnModeRecorded.classList.remove('active');
+      this.btnModeMic.classList.remove('active');
+
+      // Mostrar controles y reproductor de audio, mostrar banner IA
+      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'flex';
+      if (this.recordedSimControls) this.recordedSimControls.style.display = 'flex';
+      if (this.micLiveCard) this.micLiveCard.style.display = 'none';
+      if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'flex';
+      if (this.revealAllBtn) this.revealAllBtn.style.display = 'none';
+
+      // Actualizar tags de audio
+      if (this.audioStatusText) {
+        this.audioStatusText.textContent = 'IA Transcribiendo MP3 (15s)';
+      }
+
+      // Actualizar títulos
+      if (this.panelHeadingText) {
+        this.panelHeadingText.textContent = 'Cátedra en Vivo: Gemini Transcribiendo MP3';
+      }
+      if (this.panelSubheadingText) {
+        this.panelSubheadingText.textContent = 'Gemini Multimodal cortando y transcribiendo fragmentos de 15s del audio real';
+      }
+
+      // Renderizar feed de la transcripción IA
+      this.feedEl.innerHTML = '';
+      const aiEntries = this.aiAudioSource.getRevealedEntries();
+      if (aiEntries.length === 0) {
+        this.feedEl.innerHTML = `
+          <div class="transcript-empty-state">
+            <div class="empty-icon">🤖</div>
+            <h3>Gemini listo para transcribir el audio</h3>
+            <p>Haz clic en <strong>"▶ Iniciar"</strong> o reproduce el audio abajo. Cada 15 segundos, Gemini cortará un fragmento con ffmpeg y transcribirá la voz del profesor en tiempo real con IA.</p>
+          </div>
+        `;
+      } else {
+        aiEntries.forEach(entry => this.appendTranscriptLine(entry, false));
+      }
+
+      this.updatePlaybackUI(this.aiAudioSource.getState());
+      this.updateTimeAndProgress(this.aiAudioSource.getState());
+
+    } else {
+      // 3. Modo Grabado Pre-sincronizado (Demostración instantánea)
+      this.liveSpeechSource.stopListening();
+      this.aiAudioSource.enabled = false;
+      this.simulatedSource.enabled = true;
+
+      // Conectar fuente simulada
       this.transcriptSource = this.simulatedSource;
       if (this.chatManager) {
         this.chatManager.transcriptSource = this.simulatedSource;
@@ -299,19 +386,27 @@ class App {
 
       // Actualizar botones de modo
       this.btnModeRecorded.classList.add('active');
+      if (this.btnModeAiAudio) this.btnModeAiAudio.classList.remove('active');
       this.btnModeMic.classList.remove('active');
 
-      // Mostrar controles de audio grabado y ocultar controles de micrófono
+      // Mostrar controles de audio grabado y ocultar otros
       if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'flex';
       if (this.recordedSimControls) this.recordedSimControls.style.display = 'flex';
       if (this.micLiveCard) this.micLiveCard.style.display = 'none';
+      if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'none';
+      if (this.revealAllBtn) this.revealAllBtn.style.display = 'inline-flex';
+
+      // Actualizar tags de audio
+      if (this.audioStatusText) {
+        this.audioStatusText.textContent = 'Sincronizado';
+      }
 
       // Restaurar títulos
       if (this.panelHeadingText) {
         this.panelHeadingText.textContent = 'Transcripción de Cátedra: Modelo IS-LM';
       }
       if (this.panelSubheadingText) {
-        this.panelSubheadingText.textContent = 'Prof. Roberto Celis • Clase expositiva magistral';
+        this.panelSubheadingText.textContent = 'Prof. Roberto Celis • Audio pre-sincronizado';
       }
 
       // Renderizar feed de la clase grabada
@@ -322,6 +417,96 @@ class App {
         this.emptyStateEl.style.display = 'block';
       } else {
         recordedEntries.forEach(entry => this.appendTranscriptLine(entry, false));
+      }
+
+      this.updatePlaybackUI(this.simulatedSource.getState());
+      this.updateTimeAndProgress(this.simulatedSource.getState());
+    }
+  }
+
+  /**
+   * Manejador de eventos para el modo IA Transcribiendo MP3 en Vivo
+   */
+  handleAiAudioEvent(event, data) {
+    const state = data?.state || this.aiAudioSource.getState();
+
+    switch (event) {
+      case 'transcriptionPending': {
+        if (this.aiAudioNotice && this.aiAudioNoticeText) {
+          this.aiAudioNotice.style.display = 'flex';
+          this.aiAudioNotice.classList.add('transcribing');
+          if (this.aiAudioSpin) this.aiAudioSpin.classList.add('active');
+          this.aiAudioNoticeText.textContent = data.message || '🤖 Gemini transcribiendo fragmento en tiempo real...';
+        }
+        break;
+      }
+
+      case 'lineRevealed': {
+        const entry = data.entry;
+        if (entry) {
+          const empty = this.feedEl.querySelector('.transcript-empty-state');
+          if (empty) empty.remove();
+          this.appendTranscriptLine(entry);
+        }
+        if (this.aiAudioNotice && this.aiAudioNoticeText) {
+          this.aiAudioNotice.classList.remove('transcribing');
+          if (this.aiAudioSpin) this.aiAudioSpin.classList.remove('active');
+          this.aiAudioNoticeText.textContent = `✅ Fragmento [${entry.timestamp}] transcrito en vivo por Gemini con éxito.`;
+        }
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'transcriptionError': {
+        if (this.aiAudioNotice && this.aiAudioNoticeText) {
+          this.aiAudioNotice.classList.remove('transcribing');
+          if (this.aiAudioSpin) this.aiAudioSpin.classList.remove('active');
+          this.aiAudioNoticeText.textContent = `⚠️ Error transcribiendo fragmento: ${data.error || 'reintentando en siguiente intervalo...'}`;
+        }
+        break;
+      }
+
+      case 'clockTick': {
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'stateChange': {
+        this.updatePlaybackUI(state);
+        this.updateTimeAndProgress(state);
+        break;
+      }
+
+      case 'complete': {
+        this.statusPillEl.className = 'live-pill';
+        this.statusPillEl.style.backgroundColor = '#DCFCE7';
+        this.statusPillEl.style.color = '#15803D';
+        this.statusPillEl.innerHTML = '🏁 CLASE FINALIZADA';
+        this.updatePlaybackUI(state);
+        break;
+      }
+
+      case 'reset': {
+        this.feedEl.innerHTML = `
+          <div class="transcript-empty-state">
+            <div class="empty-icon">🤖</div>
+            <h3>Gemini listo para transcribir el audio</h3>
+            <p>Haz clic en <strong>"▶ Iniciar"</strong> o reproduce el audio abajo. Cada 15 segundos, Gemini cortará un fragmento con ffmpeg y transcribirá la voz del profesor en tiempo real con IA.</p>
+          </div>
+        `;
+        if (this.aiAudioNotice && this.aiAudioNoticeText) {
+          this.aiAudioNotice.style.display = 'flex';
+          this.aiAudioNotice.classList.remove('transcribing');
+          if (this.aiAudioSpin) this.aiAudioSpin.classList.remove('active');
+          this.aiAudioNoticeText.textContent = 'Reproduce el audio para que Gemini corte fragmentos de 15s y los transcriba en tiempo real.';
+        }
+        this.statusPillEl.className = 'live-pill';
+        this.statusPillEl.style.backgroundColor = '#FEE2E2';
+        this.statusPillEl.style.color = '#B91C1C';
+        this.statusPillEl.innerHTML = '<span class="pulse-ring"></span><span class="status-text">EN VIVO</span>';
+        this.updatePlaybackUI(state);
+        this.updateTimeAndProgress(state);
+        break;
       }
     }
   }

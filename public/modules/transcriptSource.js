@@ -71,6 +71,7 @@ export class SimulatedTranscriptSource extends TranscriptSource {
     this.speedMultiplier = 1;
     this.currentIndex = 0; // Cantidad de entradas reveladas hasta el momento
     this.isPlaying = false;
+    this.enabled = true; // Controla si esta fuente responde a eventos de audio
     this.timer = null;
     this.audioElement = null; // Elemento de audio real
     this.lastSec = -1;
@@ -83,7 +84,7 @@ export class SimulatedTranscriptSource extends TranscriptSource {
     this.audioElement = audioElement;
 
     this.audioElement.addEventListener('timeupdate', () => {
-      if (!this.audioElement) return;
+      if (!this.audioElement || !this.enabled) return;
       const currentSec = Math.floor(this.audioElement.currentTime);
       if (currentSec !== this.lastSec) {
         this.lastSec = currentSec;
@@ -92,6 +93,7 @@ export class SimulatedTranscriptSource extends TranscriptSource {
     });
 
     this.audioElement.addEventListener('play', () => {
+      if (!this.enabled) return;
       this.isPlaying = true;
       // Cuando el audio arranca, el reloj del audio toma el control absoluto
       if (this.timer) {
@@ -102,19 +104,20 @@ export class SimulatedTranscriptSource extends TranscriptSource {
     });
 
     this.audioElement.addEventListener('pause', () => {
+      if (!this.enabled) return;
       this.isPlaying = false;
       this.notify('stateChange', this.getState());
     });
 
     this.audioElement.addEventListener('ended', () => {
+      if (!this.enabled) return;
       this.revealAll();
     });
 
     this.audioElement.addEventListener('seeking', () => {
-      if (this.audioElement) {
-        const sec = Math.floor(this.audioElement.currentTime);
-        this.syncToSeconds(sec);
-      }
+      if (!this.audioElement || !this.enabled) return;
+      const sec = Math.floor(this.audioElement.currentTime);
+      this.syncToSeconds(sec);
     });
   }
 

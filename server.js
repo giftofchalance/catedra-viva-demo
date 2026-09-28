@@ -18,7 +18,8 @@ import { TRANSCRIPT_ENTRIES, FULL_TRANSCRIPT_TEXT } from './data/transcriptData.
 import { 
   answerLiveChat, 
   generatePostClassSummary, 
-  answerPostClassQuery 
+  answerPostClassQuery,
+  transcribeAudioChunk
 } from './services/llmService.js';
 
 dotenv.config();
@@ -83,6 +84,20 @@ app.get('/api/transcript', (req, res) => {
     entries: TRANSCRIPT_ENTRIES,
     fullText: FULL_TRANSCRIPT_TEXT
   });
+});
+
+/**
+ * 2.1 Transcripción real en tiempo real de fragmentos de audio MP3 con Gemini
+ */
+app.post('/api/transcribe-chunk', async (req, res) => {
+  try {
+    const { startSeconds = 0, durationSeconds = 15 } = req.body;
+    const chunk = await transcribeAudioChunk(Number(startSeconds), Number(durationSeconds));
+    res.json(chunk);
+  } catch (error) {
+    console.error('Error en /api/transcribe-chunk:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 /**
