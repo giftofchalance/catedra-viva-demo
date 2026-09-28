@@ -6,9 +6,9 @@
  * - Expone endpoints REST para chat en vivo acotado, resumen post-clase y analíticas anónimas.
  */
 
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
@@ -21,8 +21,6 @@ import {
   answerPostClassQuery,
   transcribeAudioChunk
 } from './services/llmService.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

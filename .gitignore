@@ -16,3 +16,4 @@ yarn-error.log*
 # Archivos del sistema operativo
 .DS_Store
 Thumbs.db
+temp_chunk_*.mp3

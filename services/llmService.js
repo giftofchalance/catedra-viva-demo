@@ -5,6 +5,7 @@
  * Si ocurre un error de cuota o saturación en la API, se informa transparentemente al usuario.
  */
 
+import 'dotenv/config';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
@@ -13,9 +14,13 @@ import { COURSE_CONFIG } from '../config/courseConfig.js';
 
 const execFileAsync = promisify(execFile);
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const getGeminiKey = () => process.env.GEMINI_API_KEY || '';
+const getOpenAiKey = () => process.env.OPENAI_API_KEY || '';
+const getGroqKey = () => process.env.GROQ_API_KEY || '';
+
+const GEMINI_API_KEY = getGeminiKey();
+const OPENAI_API_KEY = getOpenAiKey();
+const GROQ_API_KEY = getGroqKey();
 
 /**
  * Modelos disponibles en orden de prioridad para evitar rate limits
@@ -304,37 +309,60 @@ export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 6
     let text = '';
     let lastError = null;
 
-    // 2. Prioridad 1: Groq Whisper Large V3 Turbo (100% Gratis, ultrarrápido <0.3s y cuota independiente de Gemini)
-    if (GROQ_API_KEY) {
-      try {
-        const formData = new FormData();
-        formData.append('file', new Blob([chunkBuffer], { type: 'audio/mp3' }), 'chunk.mp3');
-        formData.append('model', 'whisper-large-v3-turbo');
-        formData.append('language', 'es');
-        formData.append('response_format', 'json');
+    const effectiveGroqKey = process.env.GROQ_API_KEY || GROQ_API_KEY;
+    const effectiveGeminiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
 
-        const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${GROQ_API_KEY}`
-          },
-          body: formData
-        });
+    console.log(`[transcribeAudioChunk] 🎧 Fragmento [${startSeconds}s - ${startSeconds + durationSeconds}s] -> Procesando con ${effectiveGroqKey ? 'Groq Whisper Large V3' : 'Gemini'}...`);
 
-        if (groqRes.ok) {
-          const groqData = await groqRes.json();
-          text = groqData.text?.trim() || '';
-        } else {
-          const errData = await groqRes.json().catch(() => ({}));
-          console.warn(`[transcribeAudioChunk] Groq falló (${groqRes.status}):`, errData);
+    // 2. Prioridad 1: Groq Whisper (100% Gratis, ultrarrápido <0.3s y cuota independiente de Gemini)
+    if (effectiveGroqKey) {
+      const groqModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
+      for (const model of groqModels) {
+        try {
+          const formData = new FormData();
+          formData.append('file', new Blob([chunkBuffer], { type: 'audio/mp3' }), 'chunk.mp3');
+          formData.append('model', model);
+          formData.append('language', 'es');
+          formData.append('response_format', 'json');
+
+          let groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${effectiveGroqKey}`
+            },
+            body: formData
+          });
+
+          // Si devuelve 429 ("Rate limit reached... Please try again in 3s"), esperar 2.5s y reintentar
+          if (groqRes.status === 429) {
+            console.warn(`[transcribeAudioChunk] Groq (${model}) 429. Esperando 2.5s para reintentar...`);
+            await new Promise(r => setTimeout(r, 2500));
+            groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${effectiveGroqKey}`
+              },
+              body: formData
+            });
+          }
+
+          if (groqRes.ok) {
+            const groqData = await groqRes.json();
+            text = groqData.text?.trim() || '';
+            console.log(`[transcribeAudioChunk] ✅ Groq (${model}) transcribió [${startSeconds}s]: "${text}"`);
+            if (text) break;
+          } else {
+            const errData = await groqRes.json().catch(() => ({}));
+            console.warn(`[transcribeAudioChunk] Groq (${model}) falló (${groqRes.status}):`, errData?.error?.message || errData);
+          }
+        } catch (err) {
+          console.warn(`[transcribeAudioChunk] Error con Groq (${model}):`, err.message);
         }
-      } catch (err) {
-        console.warn('[transcribeAudioChunk] Error con Groq Whisper:', err.message);
       }
     }
 
     // 3. Fallback a Gemini si Groq no devolvió texto o no está configurado
-    if (!text && GEMINI_API_KEY) {
+    if (!text && effectiveGeminiKey) {
       const base64Audio = chunkBuffer.toString('base64');
       const prompt = `Transcribe exactamente las palabras que dice el locutor en este fragmento de audio en español (de ${durationSeconds} segundos). 
 Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin introducciones y sin inventar palabras que no estén en el audio.`;
