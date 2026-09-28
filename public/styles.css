@@ -337,189 +337,177 @@ body {
 }
 
 /* Controles de Simulación */
-.sim-controls {
+/* ==========================================================================
+   Barra Unificada de Reproducción Multimedia (Cátedra Deck)
+   ========================================================================== */
+.unified-player-bar {
+  background: #F8FAFC;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0.5rem 0.85rem;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 0.65rem;
+  flex-shrink: 0;
 }
 
-.sim-time-display {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 600;
-  background: #F1F5F9;
-  padding: 0.35rem 0.6rem;
-  border-radius: var(--radius-sm);
-  color: #334155;
+/* Botón Play / Pause Circular */
+.player-btn-play {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.player-btn-play:hover {
+  background: #1D4ED8;
+  transform: scale(1.05);
+}
+
+.player-btn-play:active {
+  transform: scale(0.95);
+}
+
+/* Botón de Acción Rápida (+6s) */
+.player-btn-action {
+  background: white;
   border: 1px solid #CBD5E1;
-}
-
-.btn-group {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.btn {
+  color: #334155;
   font-family: var(--font-sans);
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  padding: 0.45rem 0.85rem;
+  padding: 0.32rem 0.6rem;
   border-radius: var(--radius-sm);
-  border: 1px solid transparent;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
   transition: all 0.15s ease;
-}
-
-.btn-primary {
-  background-color: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background-color: #1D4ED8;
-}
-
-.btn-secondary {
-  background-color: #F1F5F9;
-  color: #334155;
-  border-color: #CBD5E1;
-}
-
-.btn-secondary:hover {
-  background-color: #E2E8F0;
-}
-
-.btn-outline {
-  background-color: white;
-  color: var(--color-primary);
-  border-color: #BFDBFE;
-}
-
-.btn-outline:hover {
-  background-color: var(--color-primary-subtle);
-}
-
-.btn-ghost {
-  background: transparent;
-  color: var(--color-text-muted);
-}
-
-.btn-ghost:hover {
-  background-color: #F1F5F9;
-  color: var(--color-text-main);
-}
-
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-}
-
-/* Barra de Progreso */
-.progress-bar-container {
-  width: 100%;
-  height: 4px;
-  background-color: #E2E8F0;
   flex-shrink: 0;
 }
 
-.progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #3B82F6, #10B981);
-  transition: width 0.3s ease;
+.player-btn-action:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  color: #0F172A;
 }
 
-/* Reproductor de Audio Real Sincronizado (Diseño Slim) */
-.audio-player-card {
-  background: #F8FAFC;
-  border-bottom: 1px solid var(--color-border);
-  padding: 0.35rem 0.85rem;
-  flex-shrink: 0;
-}
-
-.audio-player-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.audio-info-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  white-space: nowrap;
-}
-
-.audio-icon {
-  font-size: 1rem;
-}
-
-.audio-title {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #334155;
-}
-
-.audio-status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #2563EB;
-  background: #EFF6FF;
-  border: 1px solid #BFDBFE;
-  padding: 0.12rem 0.45rem;
-  border-radius: 9999px;
-}
-
-.audio-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background-color: #3B82F6;
-}
-
-.audio-status-dot.playing {
-  background-color: #10B981;
-  animation: audioPulse 1.2s infinite;
-}
-
-@keyframes audioPulse {
-  0% { transform: scale(0.9); opacity: 0.7; }
-  50% { transform: scale(1.3); opacity: 1; }
-  100% { transform: scale(0.9); opacity: 0.7; }
-}
-
-.audio-controls-container {
+/* Línea de Tiempo / Scrubber Central */
+.player-timeline {
   flex: 1;
   display: flex;
   align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
 }
 
-.native-audio-bar {
-  width: 100%;
-  height: 32px;
+.timeline-time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748B;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.timeline-time.current {
+  color: #1E293B;
+}
+
+.timeline-track {
+  flex: 1;
+  height: 6px;
+  background: #E2E8F0;
+  border-radius: 9999px;
+  position: relative;
+  cursor: pointer;
+  transition: height 0.15s ease;
+}
+
+.timeline-track:hover {
+  height: 8px;
+}
+
+.timeline-progress {
+  height: 100%;
+  background: linear-gradient(90deg, #2563EB, #059669);
+  border-radius: 9999px;
+  position: relative;
+  transition: width 0.1s linear;
+}
+
+.timeline-thumb {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #2563EB;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.timeline-track:hover .timeline-thumb {
+  opacity: 1;
+}
+
+/* Grupo Auxiliar Derecho */
+.player-aux-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.player-aux-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #64748B;
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 0.28rem 0.5rem;
   border-radius: var(--radius-sm);
-  outline: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.player-aux-btn:hover {
+  background: white;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+.player-aux-btn.icon-only {
+  font-size: 0.85rem;
+  padding: 0.28rem 0.35rem;
 }
 
 /* Notificación de Transcripción con IA */
 .ai-audio-notice {
   background: #F0FDF4;
   border-bottom: 1px solid #BBF7D0;
-  padding: 0.35rem 0.85rem;
-  font-size: 0.76rem;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.74rem;
   color: #166534;
   font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  flex-shrink: 0;
   transition: all 0.2s ease;
 }
 

@@ -40,13 +40,16 @@ class App {
     this.btnModeRecorded = document.getElementById('btnModeRecorded');
     this.btnModeAiAudio = document.getElementById('btnModeAiAudio');
     this.btnModeMic = document.getElementById('btnModeMic');
-    this.recordedSimControls = document.getElementById('recordedSimControls');
-    this.audioPlayerCard = document.getElementById('audioPlayerCard');
+
+    // Barra de Reproducción Multimedia Unificada (Cátedra Deck)
+    this.unifiedPlayerBar = document.getElementById('unifiedPlayerBar');
+    this.timelineTrack = document.getElementById('timelineTrack');
+    this.simTimeTotal = document.getElementById('simTimeTotal');
     this.aiAudioNotice = document.getElementById('aiAudioNotice');
     this.aiAudioSpin = document.getElementById('aiAudioSpin');
     this.aiAudioNoticeText = document.getElementById('aiAudioNoticeText');
 
-    // Controles de Simulación (Modo Grabado)
+    // Controles del Reproductor Unificado
     this.playBtn = document.getElementById('btnPlayPause');
     this.playIcon = document.getElementById('playIcon');
     this.playText = document.getElementById('playText');
@@ -56,11 +59,8 @@ class App {
     this.revealAllBtn = document.getElementById('btnRevealAll');
     this.resetBtn = document.getElementById('btnReset');
     
-    // Reproductor de Audio Real
+    // Reproductor de Audio Real (en segundo plano)
     this.audioEl = document.getElementById('classAudio');
-    this.audioStatusTag = document.getElementById('audioStatusTag');
-    this.audioStatusDot = document.getElementById('audioStatusDot');
-    this.audioStatusText = document.getElementById('audioStatusText');
 
     // Elementos de Micrófono en Vivo (Speech-to-Text)
     this.micLiveCard = document.getElementById('micLiveCard');
@@ -152,19 +152,27 @@ class App {
   setupAudioListeners() {
     if (!this.audioEl) return;
 
+    this.audioEl.addEventListener('loadedmetadata', () => {
+      if (this.simTimeTotal && !isNaN(this.audioEl.duration) && this.audioEl.duration > 0) {
+        const mins = Math.floor(this.audioEl.duration / 60);
+        const secs = Math.floor(this.audioEl.duration % 60);
+        this.simTimeTotal.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
+    });
+
     this.audioEl.addEventListener('play', () => {
-      if (this.audioStatusDot) this.audioStatusDot.classList.add('playing');
-      if (this.audioStatusText) this.audioStatusText.textContent = 'Reproduciendo Audio';
+      if (this.playIcon) this.playIcon.textContent = '⏸';
+      if (this.playBtn) this.playBtn.classList.add('playing');
     });
 
     this.audioEl.addEventListener('pause', () => {
-      if (this.audioStatusDot) this.audioStatusDot.classList.remove('playing');
-      if (this.audioStatusText) this.audioStatusText.textContent = 'Audio Pausado';
+      if (this.playIcon) this.playIcon.textContent = '▶';
+      if (this.playBtn) this.playBtn.classList.remove('playing');
     });
 
     this.audioEl.addEventListener('ended', () => {
-      if (this.audioStatusDot) this.audioStatusDot.classList.remove('playing');
-      if (this.audioStatusText) this.audioStatusText.textContent = 'Audio Finalizado';
+      if (this.playIcon) this.playIcon.textContent = '▶';
+      if (this.playBtn) this.playBtn.classList.remove('playing');
     });
   }
 
@@ -211,8 +219,8 @@ class App {
     });
 
     this.speedBtn.addEventListener('click', () => {
-      if (this.currentSpeed === 1) this.currentSpeed = 2;
-      else if (this.currentSpeed === 2) this.currentSpeed = 5;
+      if (this.currentSpeed === 1) this.currentSpeed = 1.5;
+      else if (this.currentSpeed === 1.5) this.currentSpeed = 2;
       else this.currentSpeed = 1;
 
       this.speedLabel.textContent = `${this.currentSpeed}x`;
@@ -226,6 +234,26 @@ class App {
     this.resetBtn.addEventListener('click', () => {
       this.transcriptSource.reset();
     });
+
+    // Scrubber Interactivo de la barra de reproducción
+    if (this.timelineTrack) {
+      this.timelineTrack.addEventListener('click', (e) => {
+        const rect = this.timelineTrack.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const pct = Math.max(0, Math.min(1, clickX / rect.width));
+        const duration = (this.audioEl && this.audioEl.duration && !isNaN(this.audioEl.duration))
+          ? this.audioEl.duration
+          : 306;
+        const targetSeconds = Math.floor(pct * duration);
+
+        if (this.audioEl) {
+          this.audioEl.currentTime = targetSeconds;
+        }
+        if (this.transcriptSource && typeof this.transcriptSource.syncToSeconds === 'function') {
+          this.transcriptSource.syncToSeconds(targetSeconds);
+        }
+      });
+    }
   }
 
   /**
@@ -286,8 +314,7 @@ class App {
       if (this.btnModeAiAudio) this.btnModeAiAudio.classList.remove('active');
 
       // Ocultar controles de audio y mostrar controles de micrófono
-      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'none';
-      if (this.recordedSimControls) this.recordedSimControls.style.display = 'none';
+      if (this.unifiedPlayerBar) this.unifiedPlayerBar.style.display = 'none';
       if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'none';
       if (this.micLiveCard) this.micLiveCard.style.display = 'flex';
 
@@ -334,17 +361,11 @@ class App {
       this.btnModeRecorded.classList.remove('active');
       this.btnModeMic.classList.remove('active');
 
-      // Mostrar controles y reproductor de audio, mostrar banner IA
-      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'flex';
-      if (this.recordedSimControls) this.recordedSimControls.style.display = 'flex';
+      // Mostrar barra unificada y aviso IA, ocultar micrófono
+      if (this.unifiedPlayerBar) this.unifiedPlayerBar.style.display = 'flex';
       if (this.micLiveCard) this.micLiveCard.style.display = 'none';
       if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'flex';
       if (this.revealAllBtn) this.revealAllBtn.style.display = 'none';
-
-      // Actualizar tags de audio
-      if (this.audioStatusText) {
-        this.audioStatusText.textContent = 'IA Transcribiendo MP3 (cada 6s)';
-      }
 
       // Actualizar títulos
       if (this.panelHeadingText) {
@@ -362,7 +383,7 @@ class App {
           <div class="transcript-empty-state">
             <div class="empty-icon">🤖</div>
             <h3>Gemini listo para transcribir el audio en tiempo real</h3>
-            <p>Haz clic en <strong>"▶ Iniciar"</strong> o dale play al audio abajo. A medida que el profesor habla, cada 6 segundos la IA tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
+            <p>Haz clic en <strong>"▶"</strong> para iniciar. A medida que el profesor habla, cada 6 segundos la IA tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
           </div>
         `;
       } else {
@@ -389,9 +410,8 @@ class App {
       if (this.btnModeAiAudio) this.btnModeAiAudio.classList.remove('active');
       this.btnModeMic.classList.remove('active');
 
-      // Mostrar controles de audio grabado y ocultar otros
-      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'flex';
-      if (this.recordedSimControls) this.recordedSimControls.style.display = 'flex';
+      // Mostrar barra unificada y ocultar otros
+      if (this.unifiedPlayerBar) this.unifiedPlayerBar.style.display = 'flex';
       if (this.micLiveCard) this.micLiveCard.style.display = 'none';
       if (this.aiAudioNotice) this.aiAudioNotice.style.display = 'none';
       if (this.revealAllBtn) this.revealAllBtn.style.display = 'inline-flex';
@@ -717,20 +737,35 @@ class App {
 
   updateTimeAndProgress(state) {
     if (!state) return;
-    this.timeDisplayEl.textContent = `${state.currentTimestamp} / 00:04:54`;
-    this.progressBarEl.style.width = `${state.progressPercentage}%`;
+    if (this.timeDisplayEl) {
+      this.timeDisplayEl.textContent = state.currentTimestamp || '00:00:00';
+    }
+    if (this.progressBarEl) {
+      this.progressBarEl.style.width = `${state.progressPercentage || 0}%`;
+    }
+    if (this.simTimeTotal && this.audioEl && !isNaN(this.audioEl.duration) && this.audioEl.duration > 0) {
+      const mins = Math.floor(this.audioEl.duration / 60);
+      const secs = Math.floor(this.audioEl.duration % 60);
+      this.simTimeTotal.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
   }
 
   updatePlaybackUI(state) {
     if (!state) return;
     if (state.isPlaying) {
-      this.playIcon.textContent = '⏸';
-      this.playText.textContent = 'Pausar';
-      this.playBtn.classList.replace('btn-primary', 'btn-secondary');
+      if (this.playIcon) this.playIcon.textContent = '⏸';
+      if (this.playText) this.playText.textContent = 'Pausar';
+      if (this.playBtn) {
+        this.playBtn.classList.add('playing');
+        this.playBtn.setAttribute('title', 'Pausar clase');
+      }
     } else {
-      this.playIcon.textContent = '▶';
-      this.playText.textContent = state.currentIndex > 0 ? 'Reanudar' : 'Iniciar';
-      this.playBtn.classList.replace('btn-secondary', 'btn-primary');
+      if (this.playIcon) this.playIcon.textContent = '▶';
+      if (this.playText) this.playText.textContent = state.currentIndex > 0 ? 'Reanudar' : 'Iniciar';
+      if (this.playBtn) {
+        this.playBtn.classList.remove('playing');
+        this.playBtn.setAttribute('title', state.currentIndex > 0 ? 'Reanudar clase' : 'Iniciar clase');
+      }
     }
   }
 

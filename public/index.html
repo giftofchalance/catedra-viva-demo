@@ -65,6 +65,8 @@
         
         <!-- Panel Izquierdo: Transcripción en Vivo -->
         <div class="transcript-panel">
+          
+          <!-- Encabezado Limpio del Panel -->
           <div class="panel-header">
             <div class="panel-title-group">
               <span class="live-pill" id="liveStatusPill">
@@ -72,70 +74,65 @@
                 <span class="status-text">EN VIVO</span>
               </span>
               <div>
-                <h2 class="panel-heading" id="panelHeadingText">Transcripción de Cátedra: Modelo IS-LM</h2>
-                <p class="panel-subheading" id="panelSubheadingText">Prof. Roberto Celis • Clase expositiva magistral</p>
+                <h2 class="panel-heading" id="panelHeadingText">Cátedra: Modelo IS-LM</h2>
+                <p class="panel-subheading" id="panelSubheadingText">Prof. Roberto Celis • Macroeconomía</p>
               </div>
             </div>
 
-            <!-- Selector de Modo: Audio Sincronizado vs IA Transcribiendo MP3 vs Micrófono Speech-to-Text -->
+            <!-- Selector de Modo Segmentado (Elegante y Compacto) -->
             <div class="source-mode-toggle">
-              <button id="btnModeRecorded" class="mode-tab active" title="Audio sincronizado con transcripción prealmacenada">📁 Audio Sincronizado</button>
-              <button id="btnModeAiAudio" class="mode-tab" title="Gemini transcribiendo el archivo MP3 en vivo cada 6s de lo recién hablado">🤖 IA Transcribiendo MP3 (6s)</button>
-              <button id="btnModeMic" class="mode-tab" title="Hablar por micrófono con Speech-to-Text en tiempo real">🎙️ Micrófono en Vivo</button>
-            </div>
-
-            <!-- Controles de la Simulación de Transcripción (Modo Audio Grabado) -->
-            <div class="sim-controls" id="recordedSimControls">
-              <div class="sim-time-display" id="simTimeDisplay">00:00:00 / 00:04:54</div>
-              <div class="btn-group">
-                <button id="btnPlayPause" class="btn btn-primary" title="Iniciar o pausar simulación">
-                  <span id="playIcon">▶</span> <span id="playText">Iniciar</span>
-                </button>
-                <button id="btnStepNext" class="btn btn-secondary" title="Avanzar a la siguiente frase">
-                  ⏭️ +1 Frase
-                </button>
-                <button id="btnSpeed" class="btn btn-secondary" title="Velocidad de reproducción">
-                  ⚡ <span id="speedLabel">1x</span>
-                </button>
-                <button id="btnRevealAll" class="btn btn-outline" title="Revelar toda la clase de inmediato para prueba rápida">
-                  ⏩ Revelar Todo
-                </button>
-                <button id="btnReset" class="btn btn-ghost" title="Reiniciar desde el inicio">
-                  🔄
-                </button>
-              </div>
+              <button id="btnModeRecorded" class="mode-tab active" title="Audio sincronizado con transcripción prealmacenada">📁 Sincronizado</button>
+              <button id="btnModeAiAudio" class="mode-tab" title="IA Gemini transcribiendo el audio MP3 en tiempo real cada 6s">🤖 IA MP3 (6s)</button>
+              <button id="btnModeMic" class="mode-tab" title="Hablar por micrófono con Speech-to-Text en tiempo real">🎙️ Micrófono</button>
             </div>
           </div>
 
-          <!-- Barra de Progreso de la Clase -->
-          <div class="progress-bar-container">
-            <div class="progress-bar" id="progressBar" style="width: 0%;"></div>
-          </div>
+          <!-- Barra Unificada de Reproducción Multimedia (Diseño Estilo Spotify / Coursera) -->
+          <div class="unified-player-bar" id="unifiedPlayerBar">
+            <button id="btnPlayPause" class="player-btn-play" title="Reproducir / Pausar">
+              <span id="playIcon">▶</span>
+              <span id="playText" style="display: none;">Iniciar</span>
+            </button>
+            
+            <button id="btnStepNext" class="player-btn-action" title="Avanzar 6 segundos (+1 Fragmento)">
+              ⏭️ <span class="step-text">+6s</span>
+            </button>
 
-          <!-- Reproductor de Audio Real Sincronizado (Diseño Slim) -->
-          <div class="audio-player-card" id="audioPlayerCard">
-            <div class="audio-player-row">
-              <div class="audio-info-badge">
-                <span class="audio-icon">🎙️</span>
-                <span class="audio-title">Audio Cátedra</span>
-                <span class="audio-status-tag" id="audioStatusTag">
-                  <span class="audio-status-dot" id="audioStatusDot"></span>
-                  <span id="audioStatusText">Sincronizado</span>
-                </span>
+            <!-- Línea de tiempo interactiva con Scrubber -->
+            <div class="player-timeline" id="timelineContainer">
+              <span class="timeline-time current" id="simTimeDisplay">00:00:00</span>
+              <div class="timeline-track" id="timelineTrack" title="Haz clic en cualquier punto para saltar en el audio">
+                <div class="timeline-progress" id="progressBar" style="width: 0%;">
+                  <span class="timeline-thumb"></span>
+                </div>
               </div>
-              <div class="audio-controls-container">
-                <audio id="classAudio" preload="auto" src="/audio/clase.mp3" controls class="native-audio-bar"></audio>
-              </div>
+              <span class="timeline-time total" id="simTimeTotal">05:06</span>
             </div>
+
+            <!-- Botones secundarios compactos -->
+            <div class="player-aux-group">
+              <button id="btnSpeed" class="player-aux-btn" title="Velocidad de reproducción">
+                ⚡ <span id="speedLabel">1x</span>
+              </button>
+              <button id="btnRevealAll" class="player-aux-btn" title="Revelar toda la clase para prueba rápida">
+                ⏩ Todo
+              </button>
+              <button id="btnReset" class="player-aux-btn icon-only" title="Reiniciar desde el inicio">
+                🔄
+              </button>
+            </div>
+
+            <!-- Audio nativo en background (sin barra gris nativa) -->
+            <audio id="classAudio" preload="auto" src="/audio/clase.mp3" style="display: none;"></audio>
           </div>
 
-          <!-- Notificación de Estado de Gemini Transcribiendo MP3 en Vivo -->
+          <!-- Aviso de Estado Discreto cuando Gemini está transcribiendo -->
           <div class="ai-audio-notice" id="aiAudioNotice" style="display: none;">
             <span class="ai-audio-spin" id="aiAudioSpin">⚙️</span>
             <span id="aiAudioNoticeText">Reproduce el audio para que Gemini corte fragmentos de 6s y los transcriba en tiempo real con IA.</span>
           </div>
 
-          <!-- Panel de Micrófono en Vivo (Speech-to-Text en Tiempo Real) -->
+          <!-- Panel de Micrófono en Vivo (Solo se muestra en Modo Micrófono) -->
           <div class="mic-live-card" id="micLiveCard" style="display: none;">
             <div class="mic-live-row">
               <div class="mic-status-badge">
