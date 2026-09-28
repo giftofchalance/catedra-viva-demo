@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 /**
  * Modelos disponibles en orden de prioridad para evitar rate limits
@@ -300,56 +301,86 @@ export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 6
     ]);
 
     const chunkBuffer = fs.readFileSync(tempChunkPath);
-    const base64Audio = chunkBuffer.toString('base64');
-
-    // 2. Enviar a Gemini para transcripción real de audio pasado
-    const prompt = `Transcribe exactamente las palabras que dice el locutor en este fragmento de audio en español (de ${durationSeconds} segundos). 
-Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin introducciones y sin inventar palabras que no estén en el audio.`;
-
-    const body = {
-      contents: [
-        {
-          parts: [
-            { text: prompt },
-            { inline_data: { mime_type: 'audio/mp3', data: base64Audio } }
-          ]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.1
-      }
-    };
-
     let text = '';
     let lastError = null;
 
-    // Distribuir equitativamente entre los 4 modelos para nunca topar los 15 RPM por modelo
-    const modelOrder = [];
-    for (let i = 0; i < AUDIO_TRANSCRIBE_MODELS.length; i++) {
-      modelOrder.push(AUDIO_TRANSCRIBE_MODELS[(currentAudioModelIndex + i) % AUDIO_TRANSCRIBE_MODELS.length]);
-    }
-    currentAudioModelIndex = (currentAudioModelIndex + 1) % AUDIO_TRANSCRIBE_MODELS.length;
-
-    for (const modelName of modelOrder) {
+    // 2. Prioridad 1: Groq Whisper Large V3 Turbo (100% Gratis, ultrarrápido <0.3s y cuota independiente de Gemini)
+    if (GROQ_API_KEY) {
       try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
+        const formData = new FormData();
+        formData.append('file', new Blob([chunkBuffer], { type: 'audio/mp3' }), 'chunk.mp3');
+        formData.append('model', 'whisper-large-v3-turbo');
+        formData.append('language', 'es');
+        formData.append('response_format', 'json');
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`
+          },
+          body: formData
         });
 
-        if (res.ok) {
-          const data = await res.json();
-          text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-          if (text) break;
+        if (groqRes.ok) {
+          const groqData = await groqRes.json();
+          text = groqData.text?.trim() || '';
         } else {
-          const errData = await res.json().catch(() => ({}));
-          lastError = errData?.error?.message || `HTTP ${res.status}`;
-          console.warn(`[transcribeAudioChunk] Modelo ${modelName} falló (${res.status}): ${lastError}. Probando siguiente modelo...`);
+          const errData = await groqRes.json().catch(() => ({}));
+          console.warn(`[transcribeAudioChunk] Groq falló (${groqRes.status}):`, errData);
         }
-      } catch (e) {
-        lastError = e.message;
-        console.warn(`[transcribeAudioChunk] Error con ${modelName}:`, e.message);
+      } catch (err) {
+        console.warn('[transcribeAudioChunk] Error con Groq Whisper:', err.message);
+      }
+    }
+
+    // 3. Fallback a Gemini si Groq no devolvió texto o no está configurado
+    if (!text && GEMINI_API_KEY) {
+      const base64Audio = chunkBuffer.toString('base64');
+      const prompt = `Transcribe exactamente las palabras que dice el locutor en este fragmento de audio en español (de ${durationSeconds} segundos). 
+Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin introducciones y sin inventar palabras que no estén en el audio.`;
+
+      const body = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: 'audio/mp3', data: base64Audio } }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1
+        }
+      };
+
+      // Distribuir equitativamente entre los modelos para evitar rate limits
+      const modelOrder = [];
+      for (let i = 0; i < AUDIO_TRANSCRIBE_MODELS.length; i++) {
+        modelOrder.push(AUDIO_TRANSCRIBE_MODELS[(currentAudioModelIndex + i) % AUDIO_TRANSCRIBE_MODELS.length]);
+      }
+      currentAudioModelIndex = (currentAudioModelIndex + 1) % AUDIO_TRANSCRIBE_MODELS.length;
+
+      for (const modelName of modelOrder) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+            if (text) break;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            lastError = errData?.error?.message || `HTTP ${res.status}`;
+            console.warn(`[transcribeAudioChunk] Modelo ${modelName} falló (${res.status}): ${lastError}. Probando siguiente modelo...`);
+          }
+        } catch (e) {
+          lastError = e.message;
+          console.warn(`[transcribeAudioChunk] Error con ${modelName}:`, e.message);
+        }
       }
     }
 
@@ -378,7 +409,7 @@ Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin 
       id: `ai-audio-${startSeconds}`,
       timestamp,
       seconds: startSeconds,
-      speaker: 'Profesor (IA Transcribiendo MP3 en Vivo)',
+      speaker: 'Profesor (Whisper en Groq)',
       text: text || '(Pausa / audio breve)'
     };
   } catch (err) {

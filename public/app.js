@@ -369,10 +369,10 @@ class App {
 
       // Actualizar títulos
       if (this.panelHeadingText) {
-        this.panelHeadingText.textContent = 'Cátedra en Vivo: Gemini Transcribiendo MP3 (6s)';
+        this.panelHeadingText.textContent = 'Cátedra en Vivo: Whisper Transcribiendo MP3 (cada 6s)';
       }
       if (this.panelSubheadingText) {
-        this.panelSubheadingText.textContent = 'IA cortando trozos de 6s de lo que el profesor acaba de decir en el audio';
+        this.panelSubheadingText.textContent = 'Whisper Large V3 en Groq procesando trozos de 6s en tiempo real (100% gratis)';
       }
 
       // Renderizar feed de la transcripción IA
@@ -381,9 +381,9 @@ class App {
       if (aiEntries.length === 0) {
         this.feedEl.innerHTML = `
           <div class="transcript-empty-state">
-            <div class="empty-icon">🤖</div>
-            <h3>Gemini listo para transcribir el audio en tiempo real</h3>
-            <p>Haz clic en <strong>"▶"</strong> para iniciar. A medida que el profesor habla, cada 6 segundos la IA tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
+            <div class="empty-icon">⚡</div>
+            <h3>Whisper listo para transcribir el audio en tiempo real</h3>
+            <p>Haz clic en <strong>"▶"</strong> para iniciar. A medida que el profesor habla, cada 6 segundos Whisper en Groq tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
           </div>
         `;
       } else {
@@ -464,7 +464,7 @@ class App {
           this.aiAudioNotice.style.display = 'flex';
           this.aiAudioNotice.classList.add('transcribing');
           if (this.aiAudioSpin) this.aiAudioSpin.classList.add('active');
-          this.aiAudioNoticeText.textContent = data.message || '🤖 Gemini transcribiendo lo que el profesor acaba de decir...';
+          this.aiAudioNoticeText.textContent = data.message || '⚡ Whisper (Groq) transcribiendo lo que el profesor acaba de decir...';
         }
         break;
       }
@@ -479,7 +479,7 @@ class App {
         if (this.aiAudioNotice && this.aiAudioNoticeText) {
           this.aiAudioNotice.classList.remove('transcribing');
           if (this.aiAudioSpin) this.aiAudioSpin.classList.remove('active');
-          this.aiAudioNoticeText.textContent = `✅ Fragmento [${entry.timestamp}] transcrito en vivo por Gemini con éxito.`;
+          this.aiAudioNoticeText.textContent = `✅ Fragmento [${entry.timestamp}] transcrito en vivo por Whisper con éxito.`;
         }
         this.updateTimeAndProgress(state);
         break;

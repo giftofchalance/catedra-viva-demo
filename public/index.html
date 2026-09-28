@@ -82,7 +82,7 @@
             <!-- Selector de Modo Segmentado (Elegante y Compacto) -->
             <div class="source-mode-toggle">
               <button id="btnModeRecorded" class="mode-tab active" title="Audio sincronizado con transcripción prealmacenada">📁 Sincronizado</button>
-              <button id="btnModeAiAudio" class="mode-tab" title="IA Gemini transcribiendo el audio MP3 en tiempo real cada 6s">🤖 IA MP3 (6s)</button>
+              <button id="btnModeAiAudio" class="mode-tab" title="Whisper Large V3 en Groq transcribiendo el audio MP3 en tiempo real cada 6s">⚡ Whisper MP3 (6s)</button>
               <button id="btnModeMic" class="mode-tab" title="Hablar por micrófono con Speech-to-Text en tiempo real">🎙️ Micrófono</button>
             </div>
           </div>
@@ -126,10 +126,10 @@
             <audio id="classAudio" preload="auto" src="/audio/clase.mp3" style="display: none;"></audio>
           </div>
 
-          <!-- Aviso de Estado Discreto cuando Gemini está transcribiendo -->
+          <!-- Aviso de Estado Discreto cuando Whisper está transcribiendo -->
           <div class="ai-audio-notice" id="aiAudioNotice" style="display: none;">
-            <span class="ai-audio-spin" id="aiAudioSpin">⚙️</span>
-            <span id="aiAudioNoticeText">Reproduce el audio para que Gemini corte fragmentos de 6s y los transcriba en tiempo real con IA.</span>
+            <span class="ai-audio-spin" id="aiAudioSpin">⚡</span>
+            <span id="aiAudioNoticeText">Reproduce el audio para que Whisper (Groq) corte fragmentos de 6s y los transcriba en tiempo real con IA.</span>
           </div>
 
           <!-- Panel de Micrófono en Vivo (Solo se muestra en Modo Micrófono) -->
