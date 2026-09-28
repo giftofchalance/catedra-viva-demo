@@ -41,36 +41,73 @@ export class LiveSpeechTranscriptSource extends TranscriptSource {
   setupRecognitionListeners() {
     if (!this.recognition) return;
 
+    let currentAccumulated = '';
+    let lastCommitTime = Date.now();
+    let silenceTimer = null;
+
+    const commitCurrentText = () => {
+      const textToCommit = currentAccumulated.trim();
+      if (textToCommit.length > 0) {
+        this.addLiveEntry(textToCommit);
+        currentAccumulated = '';
+        lastCommitTime = Date.now();
+        if (silenceTimer) {
+          clearTimeout(silenceTimer);
+          silenceTimer = null;
+        }
+      }
+    };
+
     this.recognition.onstart = () => {
       console.log('[LiveSpeech] Reconocimiento de voz iniciado.');
       this.isListening = true;
+      lastCommitTime = Date.now();
+      currentAccumulated = '';
       this.startClock();
       this.notify('stateChange', this.getState());
     };
 
     this.recognition.onresult = (event) => {
-      let interim = '';
+      let latestText = '';
 
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         const result = event.results[i];
         const text = result[0].transcript;
 
         if (result.isFinal) {
-          const trimmed = text.trim();
-          if (trimmed.length > 0) {
-            this.addLiveEntry(trimmed);
-          }
+          currentAccumulated += (currentAccumulated ? ' ' : '') + text.trim();
+          commitCurrentText();
+          return;
         } else {
-          interim += text;
+          latestText = text;
         }
       }
 
-      if (interim.trim().length > 0) {
+      const activeText = (currentAccumulated + ' ' + latestText).trim();
+
+      if (activeText.length > 0) {
+        // Notificar palabras en tiempo real para visualización inmediata
         this.notify('interimSpeech', {
-          interimText: interim.trim(),
+          interimText: activeText,
           timestamp: this.getCurrentTimestamp(),
           state: this.getState()
         });
+
+        // REGLA 1: Detección de pausa/silencio natural (1.3 segundos sin hablar = frase consolidada)
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          if (activeText.length > 0) {
+            currentAccumulated = activeText;
+            commitCurrentText();
+          }
+        }, 1300);
+
+        // REGLA 2: Corte periódico cada X segundos (si habla de corrido por más de 6s, crea un chunk con timestamp)
+        const elapsedSinceLastCommit = (Date.now() - lastCommitTime) / 1000;
+        if (elapsedSinceLastCommit >= 6 && activeText.length > 15) {
+          currentAccumulated = activeText;
+          commitCurrentText();
+        }
       }
     };
 
