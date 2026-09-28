@@ -10,6 +10,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import path from 'path';
+import ffmpegPath from 'ffmpeg-static';
 import { COURSE_CONFIG } from '../config/courseConfig.js';
 
 const execFileAsync = promisify(execFile);
@@ -295,7 +296,8 @@ export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 6
 
   try {
     // 1. Extraer el fragmento de audio exacto (mono, 16kHz, ~18KB para 6s) en menos de 0.05s
-    await execFileAsync('ffmpeg', [
+    const ffmpegBinary = ffmpegPath || 'ffmpeg';
+    await execFileAsync(ffmpegBinary, [
       '-y',
       '-ss', String(startSeconds),
       '-t', String(durationSeconds),
