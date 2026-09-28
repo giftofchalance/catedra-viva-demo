@@ -90,8 +90,10 @@ export class AiAudioTranscriptSource extends TranscriptSource {
   }
 
   async transcribeChunk(startSec) {
-    if (this.processedChunks.has(startSec) || this.isTranscribing) return;
-    this.processedChunks.add(startSec);
+    if (this.processedChunks.has(startSec) || this.inFlightChunks?.has(startSec) || this.isTranscribing) return;
+    
+    if (!this.inFlightChunks) this.inFlightChunks = new Set();
+    this.inFlightChunks.add(startSec);
     this.isTranscribing = true;
 
     const startFormatted = this.formatTime(startSec);
@@ -116,6 +118,7 @@ export class AiAudioTranscriptSource extends TranscriptSource {
       if (response.ok) {
         const chunkData = await response.json();
         if (chunkData.text && chunkData.text.length > 0) {
+          this.processedChunks.add(startSec); // Solo marcar como completado tras éxito
           const entry = {
             id: chunkData.id || `ai-chunk-${startSec}`,
             timestamp: chunkData.timestamp || `${startFormatted} - ${endFormatted}`,
@@ -129,17 +132,28 @@ export class AiAudioTranscriptSource extends TranscriptSource {
             state: this.getState()
           });
         }
+      } else if (response.status === 429) {
+        // Cuota por minuto alcanzada: avisar y esperar breve enfriamiento antes de reintentar
+        console.warn(`[AiAudioTranscriptSource] Cuota temporal (429) en fragmento ${startSec}. Pausando 3s y reintentando...`);
+        this.notify('transcriptionError', {
+          startSeconds: startSec,
+          error: '⏳ Cuota por minuto de IA saturada. Reintentando automáticamente en breve...'
+        });
+        await new Promise(r => setTimeout(r, 3000));
       } else {
         const errJson = await response.json().catch(() => ({}));
-        console.error('[AiAudioTranscriptSource] Error del servidor:', errJson);
+        console.warn('[AiAudioTranscriptSource] Error del servidor en chunk:', errJson);
         this.notify('transcriptionError', {
           startSeconds: startSec,
           error: errJson.error || 'Error transcribiendo fragmento de audio'
         });
+        await new Promise(r => setTimeout(r, 1500));
       }
     } catch (err) {
       console.error('[AiAudioTranscriptSource] Error de red:', err);
+      await new Promise(r => setTimeout(r, 1500));
     } finally {
+      this.inFlightChunks.delete(startSec);
       this.isTranscribing = false;
       // Chequear si mientras transcribía se acumuló otro fragmento listo
       if (this.enabled && this.audioElement && !this.audioElement.paused) {
@@ -211,6 +225,7 @@ export class AiAudioTranscriptSource extends TranscriptSource {
     }
     this.entries = [];
     this.processedChunks.clear();
+    if (this.inFlightChunks) this.inFlightChunks.clear();
     this.currentSeconds = 0;
     this.isPlaying = false;
     this.isTranscribing = false;

@@ -264,10 +264,20 @@ Instrucciones:
   return await generateCompletion(systemInstruction, userPrompt);
 }
 
+const AUDIO_TRANSCRIBE_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-3.8-flash'
+];
+
+let currentAudioModelIndex = 0;
+
 /**
  * 4. MODO TRANSCRIPCIÓN REAL DE AUDIO EN VIVO:
  * Toma un fragmento del archivo de audio MP3 usando ffmpeg y lo envía a Gemini Multimodal
  * para que el modelo transcriba directamente el audio en tiempo real sin usar textos pregrabados.
+ * Usa un pool balanceado de 4 modelos en Round-Robin para cuadruplicar el límite de cuota (hasta 60 RPM).
  */
 export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 6) {
   if (!GEMINI_API_KEY) {
@@ -311,21 +321,40 @@ Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin 
     };
 
     let text = '';
-    for (const modelName of GEMINI_MODELS) {
+    let lastError = null;
+
+    // Distribuir equitativamente entre los 4 modelos para nunca topar los 15 RPM por modelo
+    const modelOrder = [];
+    for (let i = 0; i < AUDIO_TRANSCRIBE_MODELS.length; i++) {
+      modelOrder.push(AUDIO_TRANSCRIBE_MODELS[(currentAudioModelIndex + i) % AUDIO_TRANSCRIBE_MODELS.length]);
+    }
+    currentAudioModelIndex = (currentAudioModelIndex + 1) % AUDIO_TRANSCRIBE_MODELS.length;
+
+    for (const modelName of modelOrder) {
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
+
         if (res.ok) {
           const data = await res.json();
           text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
           if (text) break;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          lastError = errData?.error?.message || `HTTP ${res.status}`;
+          console.warn(`[transcribeAudioChunk] Modelo ${modelName} falló (${res.status}): ${lastError}. Probando siguiente modelo...`);
         }
       } catch (e) {
-        // reintentar con siguiente modelo
+        lastError = e.message;
+        console.warn(`[transcribeAudioChunk] Error con ${modelName}:`, e.message);
       }
+    }
+
+    if (!text && lastError) {
+      throw new Error(`Error en transcripción IA: ${lastError}`);
     }
 
     if (fs.existsSync(tempChunkPath)) {
