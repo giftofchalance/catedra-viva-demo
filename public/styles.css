@@ -303,6 +303,39 @@ body {
   color: var(--color-text-muted);
 }
 
+/* Selector de Modo de Transcripción (Audio vs Micrófono) */
+.source-mode-toggle {
+  display: flex;
+  background: #E2E8F0;
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+  align-items: center;
+}
+
+.mode-tab {
+  background: none;
+  border: none;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #475569;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.mode-tab:hover {
+  color: #1E293B;
+}
+
+.mode-tab.active {
+  background: white;
+  color: var(--color-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 /* Controles de Simulación */
 .sim-controls {
   display: flex;
@@ -474,6 +507,81 @@ body {
   height: 32px;
   border-radius: var(--radius-sm);
   outline: none;
+}
+
+/* Panel de Micrófono en Vivo (Speech-to-Text) */
+.mic-live-card {
+  background: #FFFBEB;
+  border-bottom: 1px solid #FDE68A;
+  padding: 0.35rem 0.85rem;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.mic-live-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mic-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.76rem;
+  color: #92400E;
+}
+
+.mic-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #D97706;
+}
+
+.mic-pulse-dot.recording {
+  background-color: #DC2626;
+  animation: audioPulse 1s infinite;
+}
+
+.mic-time-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: white;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid #FCD34D;
+  color: #78350F;
+}
+
+.mic-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mic-interim-preview {
+  font-size: 0.72rem;
+  color: #B45309;
+  background: white;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px dashed #FCD34D;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-label {
+  font-weight: 700;
+  color: #92400E;
 }
 
 /* Estilos KaTeX para Fórmulas Matemáticas y Macroeconómicas */

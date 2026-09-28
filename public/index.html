@@ -72,13 +72,19 @@
                 <span class="status-text">EN VIVO</span>
               </span>
               <div>
-                <h2 class="panel-heading">Transcripción de Cátedra: Modelo IS-LM</h2>
-                <p class="panel-subheading">Prof. Roberto Celis • Clase expositiva magistral</p>
+                <h2 class="panel-heading" id="panelHeadingText">Transcripción de Cátedra: Modelo IS-LM</h2>
+                <p class="panel-subheading" id="panelSubheadingText">Prof. Roberto Celis • Clase expositiva magistral</p>
               </div>
             </div>
 
-            <!-- Controles de la Simulación de Transcripción -->
-            <div class="sim-controls">
+            <!-- Selector de Modo: Audio Grabado vs Micrófono Speech-to-Text -->
+            <div class="source-mode-toggle">
+              <button id="btnModeRecorded" class="mode-tab active" title="Usar grabación auténtica de la clase de IS-LM">📁 Audio Clase</button>
+              <button id="btnModeMic" class="mode-tab" title="Hablar por micrófono con Speech-to-Text en tiempo real">🎙️ Micrófono en Vivo</button>
+            </div>
+
+            <!-- Controles de la Simulación de Transcripción (Modo Audio Grabado) -->
+            <div class="sim-controls" id="recordedSimControls">
               <div class="sim-time-display" id="simTimeDisplay">00:00:00 / 00:04:54</div>
               <div class="btn-group">
                 <button id="btnPlayPause" class="btn btn-primary" title="Iniciar o pausar simulación">
@@ -106,7 +112,7 @@
           </div>
 
           <!-- Reproductor de Audio Real Sincronizado (Diseño Slim) -->
-          <div class="audio-player-card">
+          <div class="audio-player-card" id="audioPlayerCard">
             <div class="audio-player-row">
               <div class="audio-info-badge">
                 <span class="audio-icon">🎙️</span>
@@ -119,6 +125,29 @@
               <div class="audio-controls-container">
                 <audio id="classAudio" preload="auto" src="/audio/clase.mp3" controls class="native-audio-bar"></audio>
               </div>
+            </div>
+          </div>
+
+          <!-- Panel de Micrófono en Vivo (Speech-to-Text en Tiempo Real) -->
+          <div class="mic-live-card" id="micLiveCard" style="display: none;">
+            <div class="mic-live-row">
+              <div class="mic-status-badge">
+                <span class="mic-pulse-dot" id="micPulseDot"></span>
+                <strong id="micStatusText">Micrófono Listo</strong>
+              </div>
+              <div class="mic-time-badge" id="micTimeDisplay">00:00:00</div>
+              <div class="mic-actions">
+                <button id="btnToggleMic" class="btn btn-primary btn-sm">
+                  <span id="micBtnIcon">🎙️</span> <span id="micBtnText">Comenzar a Hablar</span>
+                </button>
+                <button id="btnClearMicFeed" class="btn btn-secondary btn-sm" title="Limpiar lo hablado">
+                  🗑️ Limpiar
+                </button>
+              </div>
+            </div>
+            <div class="mic-interim-preview" id="micInterimPreview" style="display: none;">
+              <span class="preview-label">Escuchando voz:</span>
+              <em id="micInterimText">...</em>
             </div>
           </div>
 

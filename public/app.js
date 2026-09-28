@@ -10,6 +10,7 @@
  */
 
 import { SimulatedTranscriptSource } from './modules/transcriptSource.js';
+import { LiveSpeechTranscriptSource } from './modules/liveSpeechTranscriptSource.js';
 import { ChatManager } from './modules/chatManager.js';
 import { PostClassManager } from './modules/postClassManager.js';
 import { DashboardManager } from './modules/dashboardManager.js';
@@ -17,16 +18,29 @@ import { DashboardManager } from './modules/dashboardManager.js';
 class App {
   constructor() {
     this.transcriptSource = null;
+    this.simulatedSource = null;
+    this.liveSpeechSource = null;
+    this.activeSource = 'recorded'; // 'recorded' | 'mic'
     this.chatManager = null;
     this.postClassManager = null;
     this.dashboardManager = null;
 
-    // Elementos del DOM
+    // Elementos del DOM de la cátedra
     this.feedEl = document.getElementById('transcriptFeed');
     this.emptyStateEl = document.getElementById('transcriptEmptyState');
     this.timeDisplayEl = document.getElementById('simTimeDisplay');
     this.progressBarEl = document.getElementById('progressBar');
     this.statusPillEl = document.getElementById('liveStatusPill');
+    this.panelHeadingText = document.getElementById('panelHeadingText');
+    this.panelSubheadingText = document.getElementById('panelSubheadingText');
+
+    // Selector de modo de audio
+    this.btnModeRecorded = document.getElementById('btnModeRecorded');
+    this.btnModeMic = document.getElementById('btnModeMic');
+    this.recordedSimControls = document.getElementById('recordedSimControls');
+    this.audioPlayerCard = document.getElementById('audioPlayerCard');
+
+    // Controles de Simulación (Modo Grabado)
     this.playBtn = document.getElementById('btnPlayPause');
     this.playIcon = document.getElementById('playIcon');
     this.playText = document.getElementById('playText');
@@ -41,6 +55,18 @@ class App {
     this.audioStatusTag = document.getElementById('audioStatusTag');
     this.audioStatusDot = document.getElementById('audioStatusDot');
     this.audioStatusText = document.getElementById('audioStatusText');
+
+    // Elementos de Micrófono en Vivo (Speech-to-Text)
+    this.micLiveCard = document.getElementById('micLiveCard');
+    this.micPulseDot = document.getElementById('micPulseDot');
+    this.micStatusText = document.getElementById('micStatusText');
+    this.micTimeDisplay = document.getElementById('micTimeDisplay');
+    this.btnToggleMic = document.getElementById('btnToggleMic');
+    this.micBtnIcon = document.getElementById('micBtnIcon');
+    this.micBtnText = document.getElementById('micBtnText');
+    this.btnClearMicFeed = document.getElementById('btnClearMicFeed');
+    this.micInterimPreview = document.getElementById('micInterimPreview');
+    this.micInterimText = document.getElementById('micInterimText');
 
     this.currentSpeed = 1;
 
@@ -57,18 +83,31 @@ class App {
       const data = await response.json();
       const entries = data.entries || [];
 
-      // 2. Inicializar el módulo de avance de la transcripción (TranscriptSource)
-      this.transcriptSource = new SimulatedTranscriptSource(entries, { stepIntervalMs: 2500 });
+      // 2. Inicializar ambas fuentes de transcripción (Simulada y Micrófono Real)
+      this.simulatedSource = new SimulatedTranscriptSource(entries, { stepIntervalMs: 2500 });
+      this.liveSpeechSource = new LiveSpeechTranscriptSource({ lang: 'es-CL' });
+
+      // Fuente activa inicial: Grabada
+      this.transcriptSource = this.simulatedSource;
 
       // Conectar automáticamente el elemento de audio para sincronización bidireccional
       if (this.audioEl) {
-        this.transcriptSource.attachAudio(this.audioEl);
+        this.simulatedSource.attachAudio(this.audioEl);
         this.setupAudioListeners();
       }
 
-      // Suscribirse a eventos de la transcripción
-      this.transcriptSource.subscribe((event, payload) => {
-        this.handleTranscriptEvent(event, payload);
+      // Suscribirse a eventos de la fuente grabada
+      this.simulatedSource.subscribe((event, payload) => {
+        if (this.activeSource === 'recorded') {
+          this.handleTranscriptEvent(event, payload);
+        }
+      });
+
+      // Suscribirse a eventos de la fuente de micrófono en vivo
+      this.liveSpeechSource.subscribe((event, payload) => {
+        if (this.activeSource === 'mic') {
+          this.handleLiveMicEvent(event, payload);
+        }
       });
 
       // 3. Inicializar el Chat en Vivo (acoplado únicamente a la interfaz de TranscriptSource)
@@ -83,8 +122,9 @@ class App {
       this.postClassManager = new PostClassManager();
       this.dashboardManager = new DashboardManager();
 
-      // 5. Vincular controles de la interfaz
+      // 5. Vincular controles de la interfaz y selector de modo
       this.bindControls();
+      this.setupModeSwitcher();
 
     } catch (err) {
       console.error('Error inicializando la aplicación:', err);
@@ -169,6 +209,206 @@ class App {
     this.resetBtn.addEventListener('click', () => {
       this.transcriptSource.reset();
     });
+  }
+
+  /**
+   * Configura el selector de modo (Audio Grabado vs Micrófono STT)
+   */
+  setupModeSwitcher() {
+    if (this.btnModeRecorded) {
+      this.btnModeRecorded.addEventListener('click', () => this.switchMode('recorded'));
+    }
+    if (this.btnModeMic) {
+      this.btnModeMic.addEventListener('click', () => this.switchMode('mic'));
+    }
+    if (this.btnToggleMic) {
+      this.btnToggleMic.addEventListener('click', () => {
+        this.liveSpeechSource.togglePlay();
+      });
+    }
+    if (this.btnClearMicFeed) {
+      this.btnClearMicFeed.addEventListener('click', () => {
+        this.liveSpeechSource.reset();
+      });
+    }
+  }
+
+  /**
+   * Cambia dinámicamente entre la fuente grabada y la fuente de micrófono en vivo
+   */
+  switchMode(targetMode) {
+    if (this.activeSource === targetMode) return;
+    this.activeSource = targetMode;
+
+    if (targetMode === 'mic') {
+      // Pausar audio grabado si estuviera sonando
+      if (this.audioEl && !this.audioEl.paused) {
+        this.audioEl.pause();
+      }
+      if (this.simulatedSource.isPlaying) {
+        this.simulatedSource.pause();
+      }
+
+      // Conectar LiveSpeech al chat
+      this.transcriptSource = this.liveSpeechSource;
+      if (this.chatManager) {
+        this.chatManager.transcriptSource = this.liveSpeechSource;
+      }
+
+      // Actualizar botones de modo
+      this.btnModeMic.classList.add('active');
+      this.btnModeRecorded.classList.remove('active');
+
+      // Ocultar controles de audio grabado y mostrar controles de micrófono
+      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'none';
+      if (this.recordedSimControls) this.recordedSimControls.style.display = 'none';
+      if (this.micLiveCard) this.micLiveCard.style.display = 'flex';
+
+      // Actualizar títulos
+      if (this.panelHeadingText) {
+        this.panelHeadingText.textContent = 'Cátedra en Vivo: Micrófono (Speech-to-Text)';
+      }
+      if (this.panelSubheadingText) {
+        this.panelSubheadingText.textContent = 'Transcribiendo en tiempo real la voz del docente en la sala';
+      }
+
+      // Renderizar feed del micrófono
+      this.feedEl.innerHTML = '';
+      const micEntries = this.liveSpeechSource.getRevealedEntries();
+      if (micEntries.length === 0) {
+        this.feedEl.innerHTML = `
+          <div class="transcript-empty-state">
+            <div class="empty-icon">🎙️</div>
+            <h3>Micrófono listo para escuchar</h3>
+            <p>Haz clic en <strong>"🎙️ Comenzar a Hablar"</strong> y dicta tu clase. La IA transcribirá tus palabras y las usará en el chat.</p>
+          </div>
+        `;
+      } else {
+        micEntries.forEach(entry => this.appendTranscriptLine(entry, false));
+      }
+
+    } else {
+      // Detener micrófono si estuviera escuchando
+      this.liveSpeechSource.stopListening();
+
+      // Restaurar fuente simulada
+      this.transcriptSource = this.simulatedSource;
+      if (this.chatManager) {
+        this.chatManager.transcriptSource = this.simulatedSource;
+      }
+
+      // Actualizar botones de modo
+      this.btnModeRecorded.classList.add('active');
+      this.btnModeMic.classList.remove('active');
+
+      // Mostrar controles de audio grabado y ocultar controles de micrófono
+      if (this.audioPlayerCard) this.audioPlayerCard.style.display = 'flex';
+      if (this.recordedSimControls) this.recordedSimControls.style.display = 'flex';
+      if (this.micLiveCard) this.micLiveCard.style.display = 'none';
+
+      // Restaurar títulos
+      if (this.panelHeadingText) {
+        this.panelHeadingText.textContent = 'Transcripción de Cátedra: Modelo IS-LM';
+      }
+      if (this.panelSubheadingText) {
+        this.panelSubheadingText.textContent = 'Prof. Roberto Celis • Clase expositiva magistral';
+      }
+
+      // Renderizar feed de la clase grabada
+      this.feedEl.innerHTML = '';
+      const recordedEntries = this.simulatedSource.getRevealedEntries();
+      if (recordedEntries.length === 0) {
+        this.feedEl.appendChild(this.emptyStateEl);
+        this.emptyStateEl.style.display = 'block';
+      } else {
+        recordedEntries.forEach(entry => this.appendTranscriptLine(entry, false));
+      }
+    }
+  }
+
+  /**
+   * Manejador de eventos exclusivo para el micrófono en vivo
+   */
+  handleLiveMicEvent(event, data) {
+    const state = data?.state || this.liveSpeechSource.getState();
+
+    switch (event) {
+      case 'lineRevealed': {
+        const entry = data.entry;
+        if (entry) {
+          // Si el estado vacío está visible, limpiarlo
+          const empty = this.feedEl.querySelector('.transcript-empty-state');
+          if (empty) empty.remove();
+          this.appendTranscriptLine(entry);
+        }
+        if (this.micInterimPreview) {
+          this.micInterimPreview.style.display = 'none';
+        }
+        this.updateMicUI(state);
+        break;
+      }
+
+      case 'interimSpeech': {
+        if (this.micInterimPreview && this.micInterimText) {
+          this.micInterimPreview.style.display = 'flex';
+          this.micInterimText.textContent = `"${data.interimText}"`;
+        }
+        break;
+      }
+
+      case 'clockTick': {
+        if (this.micTimeDisplay) {
+          this.micTimeDisplay.textContent = state.currentTimestamp;
+        }
+        break;
+      }
+
+      case 'stateChange': {
+        this.updateMicUI(state);
+        break;
+      }
+
+      case 'reset': {
+        this.feedEl.innerHTML = `
+          <div class="transcript-empty-state">
+            <div class="empty-icon">🎙️</div>
+            <h3>Micrófono listo para escuchar</h3>
+            <p>Haz clic en <strong>"🎙️ Comenzar a Hablar"</strong> y dicta tu clase.</p>
+          </div>
+        `;
+        if (this.micInterimPreview) {
+          this.micInterimPreview.style.display = 'none';
+        }
+        this.updateMicUI(state);
+        break;
+      }
+    }
+  }
+
+  updateMicUI(state) {
+    if (!state) return;
+
+    if (this.micTimeDisplay) {
+      this.micTimeDisplay.textContent = state.currentTimestamp;
+    }
+
+    if (state.isPlaying) {
+      if (this.micPulseDot) this.micPulseDot.classList.add('recording');
+      if (this.micStatusText) this.micStatusText.textContent = 'Escuchando tu voz...';
+      if (this.micBtnIcon) this.micBtnIcon.textContent = '⏹️';
+      if (this.micBtnText) this.micBtnText.textContent = 'Pausar Micrófono';
+      if (this.btnToggleMic) {
+        this.btnToggleMic.classList.replace('btn-primary', 'btn-secondary');
+      }
+    } else {
+      if (this.micPulseDot) this.micPulseDot.classList.remove('recording');
+      if (this.micStatusText) this.micStatusText.textContent = 'Micrófono en Pausa';
+      if (this.micBtnIcon) this.micBtnIcon.textContent = '🎙️';
+      if (this.micBtnText) this.micBtnText.textContent = state.currentIndex > 0 ? 'Reanudar Micrófono' : 'Comenzar a Hablar';
+      if (this.btnToggleMic) {
+        this.btnToggleMic.classList.replace('btn-secondary', 'btn-primary');
+      }
+    }
   }
 
   /**
