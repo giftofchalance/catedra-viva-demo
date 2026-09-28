@@ -269,7 +269,7 @@ Instrucciones:
  * Toma un fragmento del archivo de audio MP3 usando ffmpeg y lo envía a Gemini Multimodal
  * para que el modelo transcriba directamente el audio en tiempo real sin usar textos pregrabados.
  */
-export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 15) {
+export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 6) {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY no está configurada.');
   }
@@ -278,7 +278,7 @@ export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 1
   const tempChunkPath = path.join(process.cwd(), `temp_chunk_${Date.now()}_${startSeconds}.mp3`);
 
   try {
-    // 1. Extraer el fragmento de audio exacto (mono, 16kHz, ~45KB) en menos de 0.1s
+    // 1. Extraer el fragmento de audio exacto (mono, 16kHz, ~18KB para 6s) en menos de 0.05s
     await execFileAsync('ffmpeg', [
       '-y',
       '-ss', String(startSeconds),
@@ -292,9 +292,9 @@ export async function transcribeAudioChunk(startSeconds = 0, durationSeconds = 1
     const chunkBuffer = fs.readFileSync(tempChunkPath);
     const base64Audio = chunkBuffer.toString('base64');
 
-    // 2. Enviar a Gemini para transcripción real de audio
-    const prompt = `Transcribe exactamente lo que dice el locutor en este fragmento de audio en español. 
-Devuelve ÚNICAMENTE el texto transcrito en una sola frase, sin introducciones ni comillas.`;
+    // 2. Enviar a Gemini para transcripción real de audio pasado
+    const prompt = `Transcribe exactamente las palabras que dice el locutor en este fragmento de audio en español (de ${durationSeconds} segundos). 
+Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin introducciones y sin inventar palabras que no estén en el audio.`;
 
     const body = {
       contents: [
@@ -332,16 +332,25 @@ Devuelve ÚNICAMENTE el texto transcrito en una sola frase, sin introducciones n
       fs.unlinkSync(tempChunkPath);
     }
 
-    const mins = Math.floor(startSeconds / 60);
-    const secs = startSeconds % 60;
-    const timestamp = `00:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    // Limpiar comillas y prefijos
+    if (text) {
+      text = text.replace(/^["'«“]|["'»”]$/g, '').trim();
+      text = text.replace(/^(Transcripción:|Texto:|El audio dice:)\s*/i, '').trim();
+    }
+
+    const startMins = Math.floor(startSeconds / 60);
+    const startSecs = startSeconds % 60;
+    const endSeconds = startSeconds + durationSeconds;
+    const endMins = Math.floor(endSeconds / 60);
+    const endSecs = endSeconds % 60;
+    const timestamp = `00:${String(startMins).padStart(2, '0')}:${String(startSecs).padStart(2, '0')} - 00:${String(endMins).padStart(2, '0')}:${String(endSecs).padStart(2, '0')}`;
 
     return {
       id: `ai-audio-${startSeconds}`,
       timestamp,
       seconds: startSeconds,
       speaker: 'Profesor (IA Transcribiendo MP3 en Vivo)',
-      text: text || '(Silencio o audio no distinguible)'
+      text: text || '(Pausa / audio breve)'
     };
   } catch (err) {
     if (fs.existsSync(tempChunkPath)) {

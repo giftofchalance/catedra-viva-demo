@@ -80,7 +80,7 @@
             <!-- Selector de Modo: Audio Sincronizado vs IA Transcribiendo MP3 vs Micrófono Speech-to-Text -->
             <div class="source-mode-toggle">
               <button id="btnModeRecorded" class="mode-tab active" title="Audio sincronizado con transcripción prealmacenada">📁 Audio Sincronizado</button>
-              <button id="btnModeAiAudio" class="mode-tab" title="Gemini transcribiendo el archivo MP3 en vivo por fragmentos de 15s">🤖 IA Transcribiendo MP3</button>
+              <button id="btnModeAiAudio" class="mode-tab" title="Gemini transcribiendo el archivo MP3 en vivo cada 6s de lo recién hablado">🤖 IA Transcribiendo MP3 (6s)</button>
               <button id="btnModeMic" class="mode-tab" title="Hablar por micrófono con Speech-to-Text en tiempo real">🎙️ Micrófono en Vivo</button>
             </div>
 
@@ -132,7 +132,7 @@
           <!-- Notificación de Estado de Gemini Transcribiendo MP3 en Vivo -->
           <div class="ai-audio-notice" id="aiAudioNotice" style="display: none;">
             <span class="ai-audio-spin" id="aiAudioSpin">⚙️</span>
-            <span id="aiAudioNoticeText">Reproduce el audio para que Gemini corte fragmentos de 15s y los transcriba en tiempo real con IA.</span>
+            <span id="aiAudioNoticeText">Reproduce el audio para que Gemini corte fragmentos de 6s y los transcriba en tiempo real con IA.</span>
           </div>
 
           <!-- Panel de Micrófono en Vivo (Speech-to-Text en Tiempo Real) -->

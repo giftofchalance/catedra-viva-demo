@@ -91,7 +91,7 @@ app.get('/api/transcript', (req, res) => {
  */
 app.post('/api/transcribe-chunk', async (req, res) => {
   try {
-    const { startSeconds = 0, durationSeconds = 15 } = req.body;
+    const { startSeconds = 0, durationSeconds = 6 } = req.body;
     const chunk = await transcribeAudioChunk(Number(startSeconds), Number(durationSeconds));
     res.json(chunk);
   } catch (error) {

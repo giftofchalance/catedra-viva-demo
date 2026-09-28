@@ -92,7 +92,7 @@ class App {
       // 2. Inicializar las tres fuentes de transcripción
       this.simulatedSource = new SimulatedTranscriptSource(entries, { stepIntervalMs: 2500 });
       this.liveSpeechSource = new LiveSpeechTranscriptSource({ lang: 'es-CL' });
-      this.aiAudioSource = new AiAudioTranscriptSource({ chunkDurationSeconds: 15 });
+      this.aiAudioSource = new AiAudioTranscriptSource({ chunkDurationSeconds: 6 });
 
       // Fuente activa inicial: Grabada (pre-sincronizada)
       this.transcriptSource = this.simulatedSource;
@@ -343,15 +343,15 @@ class App {
 
       // Actualizar tags de audio
       if (this.audioStatusText) {
-        this.audioStatusText.textContent = 'IA Transcribiendo MP3 (15s)';
+        this.audioStatusText.textContent = 'IA Transcribiendo MP3 (cada 6s)';
       }
 
       // Actualizar títulos
       if (this.panelHeadingText) {
-        this.panelHeadingText.textContent = 'Cátedra en Vivo: Gemini Transcribiendo MP3';
+        this.panelHeadingText.textContent = 'Cátedra en Vivo: Gemini Transcribiendo MP3 (6s)';
       }
       if (this.panelSubheadingText) {
-        this.panelSubheadingText.textContent = 'Gemini Multimodal cortando y transcribiendo fragmentos de 15s del audio real';
+        this.panelSubheadingText.textContent = 'IA cortando trozos de 6s de lo que el profesor acaba de decir en el audio';
       }
 
       // Renderizar feed de la transcripción IA
@@ -361,8 +361,8 @@ class App {
         this.feedEl.innerHTML = `
           <div class="transcript-empty-state">
             <div class="empty-icon">🤖</div>
-            <h3>Gemini listo para transcribir el audio</h3>
-            <p>Haz clic en <strong>"▶ Iniciar"</strong> o reproduce el audio abajo. Cada 15 segundos, Gemini cortará un fragmento con ffmpeg y transcribirá la voz del profesor en tiempo real con IA.</p>
+            <h3>Gemini listo para transcribir el audio en tiempo real</h3>
+            <p>Haz clic en <strong>"▶ Iniciar"</strong> o dale play al audio abajo. A medida que el profesor habla, cada 6 segundos la IA tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
           </div>
         `;
       } else {
@@ -431,12 +431,20 @@ class App {
     const state = data?.state || this.aiAudioSource.getState();
 
     switch (event) {
+      case 'listeningBuffer': {
+        if (this.aiAudioNotice && this.aiAudioNoticeText && !this.aiAudioNotice.classList.contains('transcribing')) {
+          this.aiAudioNotice.style.display = 'flex';
+          this.aiAudioNoticeText.textContent = data.message || '🎧 Escuchando audio... transcribiendo los primeros 6s al llegar a 00:00:06';
+        }
+        break;
+      }
+
       case 'transcriptionPending': {
         if (this.aiAudioNotice && this.aiAudioNoticeText) {
           this.aiAudioNotice.style.display = 'flex';
           this.aiAudioNotice.classList.add('transcribing');
           if (this.aiAudioSpin) this.aiAudioSpin.classList.add('active');
-          this.aiAudioNoticeText.textContent = data.message || '🤖 Gemini transcribiendo fragmento en tiempo real...';
+          this.aiAudioNoticeText.textContent = data.message || '🤖 Gemini transcribiendo lo que el profesor acaba de decir...';
         }
         break;
       }
@@ -490,15 +498,15 @@ class App {
         this.feedEl.innerHTML = `
           <div class="transcript-empty-state">
             <div class="empty-icon">🤖</div>
-            <h3>Gemini listo para transcribir el audio</h3>
-            <p>Haz clic en <strong>"▶ Iniciar"</strong> o reproduce el audio abajo. Cada 15 segundos, Gemini cortará un fragmento con ffmpeg y transcribirá la voz del profesor en tiempo real con IA.</p>
+            <h3>Gemini listo para transcribir el audio en tiempo real</h3>
+            <p>Haz clic en <strong>"▶ Iniciar"</strong> o reproduce el audio abajo. A medida que el profesor habla, cada 6 segundos la IA tomará ese pedacito de audio y transcribirá exactamente lo recién dicho.</p>
           </div>
         `;
         if (this.aiAudioNotice && this.aiAudioNoticeText) {
           this.aiAudioNotice.style.display = 'flex';
           this.aiAudioNotice.classList.remove('transcribing');
           if (this.aiAudioSpin) this.aiAudioSpin.classList.remove('active');
-          this.aiAudioNoticeText.textContent = 'Reproduce el audio para que Gemini corte fragmentos de 15s y los transcriba en tiempo real.';
+          this.aiAudioNoticeText.textContent = 'Reproduce el audio para que Gemini corte fragmentos de 6s y los transcriba en tiempo real.';
         }
         this.statusPillEl.className = 'live-pill';
         this.statusPillEl.style.backgroundColor = '#FEE2E2';

@@ -1,9 +1,16 @@
 /**
  * Implementación de TranscriptSource que transcribe el archivo de audio MP3 en tiempo real con Gemini
  * 
- * En lugar de usar textos pregrabados, a medida que el audio se reproduce (o avanza el reloj),
- * extrae fragmentos de 15 segundos del archivo MP3 y los envía a Gemini Multimodal para
- * transcribir la voz auténtica del profesor de forma 100% generada por la IA en tiempo real.
+ * COMPORTAMIENTO RIGUROSAMENTE TEMPORAL (AUDIO PASADO):
+ * En lugar de adelantarse al audio, transcribe únicamente los fragmentos que YA han terminado
+ * de ser pronunciados por el profesor cada 6 segundos.
+ * 
+ * - t = 0s a 6s: El audio suena, el profesor habla.
+ * - t = 6s: Se toma el fragmento de los últimos 6s (00:00:00 - 00:00:06) y se envía a Gemini.
+ * - t ≈ 8s: Gemini devuelve el texto exacto de lo recién dicho y se revela en el feed.
+ * - t = 12s: Se toma el fragmento (00:00:06 - 00:00:12) y se envía a Gemini.
+ * 
+ * Así nunca muestra texto del futuro ni lee transcripciones pregrabadas.
  */
 
 import { TranscriptSource } from './transcriptSource.js';
@@ -12,7 +19,7 @@ export class AiAudioTranscriptSource extends TranscriptSource {
   constructor(options = {}) {
     super();
 
-    this.chunkDurationSeconds = options.chunkDurationSeconds || 15;
+    this.chunkDurationSeconds = options.chunkDurationSeconds || 6; // Cortes de 6 segundos exactos
     this.totalDurationSeconds = options.totalDurationSeconds || 306; // 5 min 6 seg
     this.entries = [];
     this.processedChunks = new Set();
@@ -57,11 +64,28 @@ export class AiAudioTranscriptSource extends TranscriptSource {
   async checkAndTranscribeCurrentWindow() {
     if (!this.enabled || this.isTranscribing) return;
 
-    const chunkIndex = Math.floor(this.currentSeconds / this.chunkDurationSeconds);
-    const startSec = chunkIndex * this.chunkDurationSeconds;
+    // Cantidad de fragmentos de 6 segundos que YA HAN TERMINADO de escucharse
+    const completedChunksCount = Math.floor(this.currentSeconds / this.chunkDurationSeconds);
+    
+    // Si aún no han pasado los primeros 6 segundos de audio, solo estamos acumulando buffer
+    if (completedChunksCount <= 0) {
+      if (this.currentSeconds > 0 && this.entries.length === 0) {
+        this.notify('listeningBuffer', {
+          currentSeconds: this.currentSeconds,
+          nextChunkAt: this.chunkDurationSeconds,
+          message: `🎧 Escuchando al profesor... (transcribiendo los primeros 6s al llegar a 00:00:0${this.chunkDurationSeconds})`
+        });
+      }
+      return;
+    }
 
-    if (!this.processedChunks.has(startSec)) {
-      await this.transcribeChunk(startSec);
+    // Buscar en orden cronológico el fragmento completado más antiguo aún no transcrito
+    for (let i = 0; i < completedChunksCount; i++) {
+      const startSec = i * this.chunkDurationSeconds;
+      if (!this.processedChunks.has(startSec)) {
+        await this.transcribeChunk(startSec);
+        break; // Procesar uno por uno de forma estrictamente secuencial
+      }
     }
   }
 
@@ -70,10 +94,13 @@ export class AiAudioTranscriptSource extends TranscriptSource {
     this.processedChunks.add(startSec);
     this.isTranscribing = true;
 
+    const startFormatted = this.formatTime(startSec);
+    const endFormatted = this.formatTime(Math.min(startSec + this.chunkDurationSeconds, this.totalDurationSeconds));
+
     this.notify('transcriptionPending', {
       startSeconds: startSec,
-      timestamp: this.formatTime(startSec),
-      message: `🤖 Gemini transcribiendo fragmento ${this.formatTime(startSec)} (${startSec}s - ${Math.min(startSec + this.chunkDurationSeconds, this.totalDurationSeconds)}s) directamente del audio...`
+      timestamp: `${startFormatted} - ${endFormatted}`,
+      message: `🤖 Gemini transcribiendo lo que el profesor acaba de decir (${startFormatted} - ${endFormatted})...`
     });
 
     try {
@@ -91,7 +118,7 @@ export class AiAudioTranscriptSource extends TranscriptSource {
         if (chunkData.text && chunkData.text.length > 0) {
           const entry = {
             id: chunkData.id || `ai-chunk-${startSec}`,
-            timestamp: chunkData.timestamp,
+            timestamp: chunkData.timestamp || `${startFormatted} - ${endFormatted}`,
             seconds: startSec,
             speaker: 'Profesor (IA Transcribiendo MP3 en Vivo)',
             text: chunkData.text
@@ -107,13 +134,17 @@ export class AiAudioTranscriptSource extends TranscriptSource {
         console.error('[AiAudioTranscriptSource] Error del servidor:', errJson);
         this.notify('transcriptionError', {
           startSeconds: startSec,
-          error: errJson.error || 'Error transcribiendo audio'
+          error: errJson.error || 'Error transcribiendo fragmento de audio'
         });
       }
     } catch (err) {
       console.error('[AiAudioTranscriptSource] Error de red:', err);
     } finally {
       this.isTranscribing = false;
+      // Chequear si mientras transcribía se acumuló otro fragmento listo
+      if (this.enabled && this.audioElement && !this.audioElement.paused) {
+        this.checkAndTranscribeCurrentWindow();
+      }
     }
   }
 
@@ -121,16 +152,17 @@ export class AiAudioTranscriptSource extends TranscriptSource {
     const nextStartSec = this.entries.length * this.chunkDurationSeconds;
     if (nextStartSec >= this.totalDurationSeconds) return;
 
+    // Al forzar +1 Frase, adelantamos el audio al final del fragmento de 6s y lo transcribimos
+    const targetEndSec = Math.min(nextStartSec + this.chunkDurationSeconds, this.totalDurationSeconds);
     if (this.audioElement) {
-      this.audioElement.currentTime = nextStartSec;
+      this.audioElement.currentTime = targetEndSec;
     }
-    this.currentSeconds = nextStartSec;
+    this.currentSeconds = targetEndSec;
     await this.transcribeChunk(nextStartSec);
   }
 
   revealAll() {
-    // Para modo IA no revelamos todos juntos de golpe para no saturar la API
-    console.warn('[AiAudioTranscriptSource] En modo IA, los fragmentos se transcriben secuencialmente.');
+    console.warn('[AiAudioTranscriptSource] En modo IA en vivo, los fragmentos se transcriben secuencialmente a medida que transcurre el audio.');
   }
 
   setSpeed(speed) {
@@ -181,6 +213,7 @@ export class AiAudioTranscriptSource extends TranscriptSource {
     this.processedChunks.clear();
     this.currentSeconds = 0;
     this.isPlaying = false;
+    this.isTranscribing = false;
     this.notify('reset', this.getState());
   }
 
