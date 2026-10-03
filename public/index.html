@@ -243,9 +243,14 @@
             <h2>Informe de Estudio Post-Clase: Modelo IS-LM</h2>
             <p>Generado automáticamente por el LLM a partir de la transcripción íntegra de la cátedra (4 min 54 s).</p>
           </div>
-          <button id="btnRegenerateSummary" class="btn btn-secondary">
-            ⚡ Regenerar con LLM
-          </button>
+          <div class="post-banner-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <button id="btnExportMarkdown" class="btn btn-primary" title="Descargar informe completo en formato Markdown (.md) para Notion, Obsidian o U-Cursos">
+              📥 Descargar Apuntes (.md)
+            </button>
+            <button id="btnRegenerateSummary" class="btn btn-secondary">
+              ⚡ Regenerar con LLM
+            </button>
+          </div>
         </div>
 
         <div class="post-grid">
@@ -453,22 +458,29 @@
       <div class="dashboard-container">
         
         <div class="dashboard-banner">
-          <div class="banner-badge">Analítica Docente • Capa 2 (100% Anónima)</div>
-          <h2>Panel de Comprensión de Cátedra en Tiempo Real</h2>
-          <p>
-            Información agregada y anónima generada a partir de las consultas espontáneas de los estudiantes durante la clase. Permite al docente detectar puntos ciegos sin invadir la privacidad de los alumnos.
-          </p>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+            <div>
+              <div class="banner-badge">Analítica Docente • Capa 2 (100% Anónima)</div>
+              <h2>Panel de Comprensión de Cátedra en Tiempo Real</h2>
+              <p>
+                Información agregada y anónima generada a partir de las consultas espontáneas de los estudiantes durante la clase. Permite al docente detectar puntos ciegos sin invadir la privacidad de los alumnos.
+              </p>
+            </div>
+            <button id="btnRefreshStats" class="btn btn-secondary btn-sm" title="Actualizar métricas generadas por el chat">
+              🔄 Actualizar Métricas
+            </button>
+          </div>
         </div>
 
         <!-- Alerta de Comprensión Inmediata -->
         <div class="alert-card alert-info">
           <div class="alert-icon">💡</div>
           <div class="alert-content">
-            <h3>Alerta de Comprensión (Últimos 10 minutos de clase)</h3>
-            <p class="alert-main-text">
+            <h3>Alerta de Comprensión (En Vivo)</h3>
+            <p class="alert-main-text" id="statAlertText">
               <strong>42% de las preguntas de los estudiantes</strong> se concentraron en la definición y pendiente positiva de la <strong>Curva LM</strong> (mercado de dinero).
             </p>
-            <div class="alert-recommendation">
+            <div class="alert-recommendation" id="statRecommendationText">
               <strong>🎯 Sugerencia didáctica para el profesor:</strong> Conviene dedicar 3 minutos a reforzar por qué un aumento del producto nacional (PIB) genera mayor demanda transaccional de dinero y cómo eso presiona al alza la tasa de interés en el mercado financiero.
             </div>
           </div>
@@ -477,11 +489,11 @@
         <!-- Métricas Rápidas -->
         <div class="stats-row">
           <div class="stat-card">
-            <span class="stat-value">48</span>
+            <span class="stat-value" id="statActiveStudents">48</span>
             <span class="stat-label">Estudiantes Conectados</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">42</span>
+            <span class="stat-value" id="statTotalQuestions">11</span>
             <span class="stat-label">Preguntas Totales Realizadas</span>
           </div>
           <div class="stat-card">

@@ -21,6 +21,7 @@ import {
   answerPostClassQuery,
   transcribeAudioChunk
 } from './services/llmService.js';
+import { analyticsService } from './services/analyticsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,6 +114,13 @@ app.post('/api/chat', async (req, res) => {
     const answer = await answerLiveChat({
       question: question.trim(),
       revealedTranscript: revealedTranscript || '',
+      currentTimeFormatted: currentTimeFormatted || '00:00:00'
+    });
+
+    // Registrar en Analítica de Comprensión (Capa 2: agregada y anónima)
+    analyticsService.recordQuestion({
+      question: question.trim(),
+      answer,
       currentTimeFormatted: currentTimeFormatted || '00:00:00'
     });
 
@@ -209,37 +217,15 @@ app.get('/api/recurrence', (req, res) => {
 });
 
 /**
- * 7. Datos del Dashboard del Profesor (Estadísticas agregadas y anónimas)
+ * 7. Datos del Dashboard del Profesor (Estadísticas agregadas y anónimas en tiempo real)
  */
 app.get('/api/stats', (req, res) => {
-  res.json({
-    activeStudents: 48,
-    totalQuestionsAsked: 42,
-    anonymousLevel: "Capa 2: 100% anonimizada y agregada (identidad protegida)",
-    alert: {
-      active: true,
-      severity: "info",
-      text: "42% de las preguntas de los últimos 10 minutos se concentraron en la definición y pendiente de la Curva LM."
-    },
-    topicDistribution: [
-      { topic: "Curva LM y mercado de dinero", percentage: 42, count: 18, color: "#3B82F6" },
-      { topic: "Curva IS y mercado de bienes", percentage: 26, count: 11, color: "#10B981" },
-      { topic: "Políticas Fiscales vs. Monetarias", percentage: 19, count: 8, color: "#F59E0B" },
-      { topic: "Dudas fuera de clase (ej. Modelo de Solow)", percentage: 8, count: 3, color: "#8B5CF6" },
-      { topic: "Consultas rechazadas (fuera de curso)", percentage: 5, count: 2, color: "#EF4444" }
-    ],
-    timelineDensity: [
-      { interval: "00:00 - 00:01", count: 3, label: "Apertura y noción de equilibrio" },
-      { interval: "00:01 - 00:02", count: 7, label: "Definición IS y ahorro/inversión" },
-      { interval: "00:02 - 00:03", count: 19, label: "Pico: Curva LM y tasa de interés" },
-      { interval: "00:03 - 00:04", count: 9, label: "Políticas fiscales y monetarias" },
-      { interval: "00:04 - 00:05", count: 4, label: "Síntesis final del docente" }
-    ],
-    didacticRecommendations: [
-      "Dedicar 3-4 minutos a reforzar por qué un aumento del PIB eleva la demanda de dinero y consecuentemente la tasa de interés en la curva LM.",
-      "Aclarar la diferencia entre las herramientas del Banco Central (política monetaria) y las del Ministerio de Hacienda/Gobierno (política fiscal)."
-    ]
-  });
+  res.json(analyticsService.getAggregatedStats());
+});
+
+app.post('/api/stats/reset', (req, res) => {
+  analyticsService.reset();
+  res.json({ success: true, message: 'Estadísticas de la sesión reiniciadas' });
 });
 
 // Fallback para servir la SPA en cualquier ruta no reconocida de la API

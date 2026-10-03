@@ -200,7 +200,7 @@ class App {
         if (targetId === 'post' && this.postClassManager) {
           this.postClassManager.loadSummary(false);
         } else if (targetId === 'dashboard' && this.dashboardManager) {
-          this.dashboardManager.loadStats();
+          this.dashboardManager.loadStats(true);
         }
       });
     });

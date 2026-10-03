@@ -11,19 +11,37 @@ export class DashboardManager {
   constructor() {
     this.barChartEl = document.getElementById('topicsBarChart');
     this.timelineChartEl = document.getElementById('timelineDensityChart');
-    this.isLoaded = false;
+    this.statActiveStudents = document.getElementById('statActiveStudents');
+    this.statTotalQuestions = document.getElementById('statTotalQuestions');
+    this.statAlertText = document.getElementById('statAlertText');
+    this.statRecommendationText = document.getElementById('statRecommendationText');
+    this.btnRefreshStats = document.getElementById('btnRefreshStats');
+
+    if (this.btnRefreshStats) {
+      this.btnRefreshStats.addEventListener('click', () => {
+        this.loadStats(true);
+      });
+    }
   }
 
-  async loadStats() {
-    if (this.isLoaded) return;
-
+  async loadStats(forceRefresh = false) {
     try {
       const response = await fetch('/api/stats');
       const data = await response.json();
       if (response.ok && data) {
+        if (this.statActiveStudents) this.statActiveStudents.textContent = data.activeStudents || 48;
+        if (this.statTotalQuestions) this.statTotalQuestions.textContent = data.totalQuestionsAsked || 0;
+        
+        if (this.statAlertText && data.alert?.text) {
+          this.statAlertText.innerHTML = `<strong>${data.alert.text}</strong>`;
+        }
+
+        if (this.statRecommendationText && data.didacticRecommendations?.[0]) {
+          this.statRecommendationText.innerHTML = `<strong>🎯 Sugerencia didáctica para el profesor:</strong> ${data.didacticRecommendations[0]}`;
+        }
+
         this.renderBarChart(data.topicDistribution);
         this.renderTimeline(data.timelineDensity);
-        this.isLoaded = true;
       }
     } catch (err) {
       console.error('Error cargando estadísticas del dashboard:', err);

@@ -20,8 +20,10 @@ export class PostClassManager {
     this.transcriptArchive = document.getElementById('fullTranscriptArchive');
     this.transcriptFilter = document.getElementById('transcriptFilterInput');
     this.btnRegenerate = document.getElementById('btnRegenerateSummary');
+    this.btnExport = document.getElementById('btnExportMarkdown');
 
     this.allTranscriptEntries = [];
+    this.latestSummaryData = null;
     this.init();
   }
 
@@ -38,6 +40,12 @@ export class PostClassManager {
     this.btnRegenerate.addEventListener('click', () => {
       this.loadSummary(true);
     });
+
+    if (this.btnExport) {
+      this.btnExport.addEventListener('click', () => {
+        this.exportMarkdown();
+      });
+    }
 
     this.loadTranscriptArchive();
   }
@@ -59,6 +67,7 @@ export class PostClassManager {
 
       const data = await response.json();
       if (response.ok && data) {
+        this.latestSummaryData = data;
         this.renderSummary(data);
       } else {
         this.summaryContainer.innerHTML = `<p class="text-danger">Error: ${data.error || 'No se pudo cargar el resumen.'}</p>`;
@@ -220,4 +229,79 @@ export class PostClassManager {
     div.textContent = str;
     return div.innerHTML;
   }
+
+  exportMarkdown() {
+    if (!this.latestSummaryData) {
+      alert('Por favor espera a que se cargue el resumen de la clase antes de descargarlo.');
+      return;
+    }
+
+    const data = this.latestSummaryData;
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    let md = `# Cátedra Viva - Guía de Estudio y Apuntes de Clase\n\n`;
+    md += `**Materia:** Macroeconomía I / Dinámica Macroeconómica  \n`;
+    md += `**Tema:** Modelo IS-LM (Mercado de Bienes y Mercado de Dinero)  \n`;
+    md += `**Fecha de sesión:** ${dateStr}  \n`;
+    md += `**Generado automáticamente por:** Sistema Cátedra Viva  \n\n`;
+    md += `---\n\n`;
+
+    // Resumen ejecutivo
+    md += `## 1. Resumen Ejecutivo de la Sesión\n\n`;
+    if (typeof data.summary === 'string') {
+      md += `${data.summary.trim()}\n\n`;
+    } else {
+      md += `${JSON.stringify(data.summary)}\n\n`;
+    }
+
+    // Conceptos clave
+    md += `## 2. Conceptos Clave y Definiciones Pedagógicas\n\n`;
+    if (Array.isArray(data.keyConcepts) && data.keyConcepts.length > 0) {
+      data.keyConcepts.forEach((c, idx) => {
+        md += `### ${idx + 1}. ${c.term || 'Concepto'} [⏱️ ${c.timestamp || '00:00'}]\n`;
+        md += `${c.definition || ''}\n\n`;
+      });
+    } else {
+      md += `*No se registraron conceptos clave adicionales.*\n\n`;
+    }
+
+    // Preguntas de autoevaluación
+    md += `## 3. Preguntas de Autoevaluación y Reflexión\n\n`;
+    if (Array.isArray(data.studyQuestions) && data.studyQuestions.length > 0) {
+      data.studyQuestions.forEach((q, idx) => {
+        md += `**Pregunta ${idx + 1}:** ${q.question || ''}\n\n`;
+        if (q.hint) {
+          md += `> 💡 **Pista / Guía analítica:** ${q.hint}\n\n`;
+        }
+      });
+    } else {
+      md += `*No se registraron preguntas de autoevaluación.*\n\n`;
+    }
+
+    // Transcripción indexada
+    md += `## 4. Registro y Transcripción Indexada de la Clase\n\n`;
+    if (Array.isArray(this.allTranscriptEntries) && this.allTranscriptEntries.length > 0) {
+      this.allTranscriptEntries.forEach(entry => {
+        md += `- **[${entry.timestamp}]** ${entry.text}\n`;
+      });
+      md += `\n`;
+    } else {
+      md += `*Transcripción en vivo sincronizada.*\n\n`;
+    }
+
+    md += `---\n*Documento educativo generado por Cátedra Viva bajo principios de privacidad Layer 2.*\n`;
+
+    // Trigger browser download
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Catedra_Viva_Apuntes_ISLM_${now.toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
 }
+
