@@ -251,7 +251,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🚀 Cátedra Viva - Aula Aumentada con IA`);
   console.log(`📡 Servidor escuchando en: http://0.0.0.0:${PORT}`);
-  console.log(`🔑 LLM Provider: ${process.env.GEMINI_API_KEY ? 'Google Gemini (Pool Activo)' : (process.env.OPENAI_API_KEY ? 'OpenAI GPT-4o-mini' : 'Ninguno')} (Protegido en servidor)`);
+  const provider = process.env.GROQ_API_KEY ? 'Groq (Primario) con Fallback a Gemini' : (process.env.GEMINI_API_KEY ? 'Google Gemini' : 'Ninguno');
+  console.log(`🔑 LLM Provider: ${provider} (Protegido en servidor)`);
   console.log(`📚 Curso: ${COURSE_CONFIG.courseCode} - ${COURSE_CONFIG.courseName}`);
   console.log(`=======================================================`);
 });

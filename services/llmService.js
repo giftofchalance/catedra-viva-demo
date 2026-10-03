@@ -138,16 +138,94 @@ async function callOpenAI(systemInstruction, userPrompt) {
 }
 
 /**
+ * Función interna para llamar a Groq Chat (GPT-OSS 120B / Qwen 27B)
+ * Alta velocidad (<0.5s), confiabilidad extrema y cuota independiente.
+ */
+async function callGroq(systemInstruction, userPrompt) {
+  const groqKey = getGroqKey();
+  if (!groqKey) {
+    throw new Error('GROQ_API_KEY no configurada.');
+  }
+
+  const models = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b'];
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.15,
+          max_tokens: 2048
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const content = data.choices?.[0]?.message?.content?.trim();
+        if (content) {
+          console.log(`[Groq Chat] ✅ Respuesta generada exitosamente usando ${model}`);
+          return content;
+        }
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        lastError = errData?.error?.message || `HTTP ${response.status}`;
+        console.warn(`[Groq Chat] Modelo ${model} falló (${response.status}): ${lastError}. Probando siguiente modelo...`);
+      }
+    } catch (e) {
+      lastError = e.message;
+      console.warn(`[Groq Chat] Error de red con ${model}:`, e.message);
+    }
+  }
+
+  throw new Error(`Error en Groq Chat: ${lastError}`);
+}
+
+/**
  * Enrutador principal de LLM (llamada real sin mocks)
+ * Prioridad 1: Groq (Ultrarrápido, modelos 120B/27B, alta confiabilidad)
+ * Prioridad 2: Google Gemini (Fallback transparente ante cualquier error)
+ * Prioridad 3: OpenAI (si estuviera configurado)
  */
 export async function generateCompletion(systemInstruction, userPrompt) {
-  if (GEMINI_API_KEY) {
-    return await callGemini(systemInstruction, userPrompt);
-  } else if (OPENAI_API_KEY) {
-    return await callOpenAI(systemInstruction, userPrompt);
-  } else {
-    throw new Error('No se encontró ninguna API key configurada en el servidor.');
+  const groqKey = getGroqKey();
+  const geminiKey = getGeminiKey();
+  const openAiKey = getOpenAiKey();
+
+  // 1. Intentar con Groq primero (calidad superior y latencia <0.5s)
+  if (groqKey) {
+    try {
+      return await callGroq(systemInstruction, userPrompt);
+    } catch (err) {
+      console.warn('[LLM Router] Groq falló o no respondió. Activando fallback a Gemini:', err.message);
+    }
   }
+
+  // 2. Fallback a Google Gemini
+  if (geminiKey) {
+    try {
+      return await callGemini(systemInstruction, userPrompt);
+    } catch (err) {
+      console.warn('[LLM Router] Gemini falló:', err.message);
+      if (!openAiKey) throw err;
+    }
+  }
+
+  // 3. Fallback a OpenAI
+  if (openAiKey) {
+    return await callOpenAI(systemInstruction, userPrompt);
+  }
+
+  throw new Error('No se pudo obtener respuesta de ningún proveedor de IA (Groq ni Gemini).');
 }
 
 /**
