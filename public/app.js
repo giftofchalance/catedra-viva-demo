@@ -334,16 +334,20 @@ class App {
           <div class="transcript-empty-state">
             <div class="empty-icon">🎙️</div>
             <h3>Micrófono listo para escuchar</h3>
-            <p>Haz clic en <strong>"🎙️ Comenzar a Hablar"</strong> y dicta tu clase. La IA transcribirá tus palabras y las usará en el chat.</p>
+            <p>Habla directamente por el micrófono de tu navegador o abre <strong><a href="/mic.html" target="_blank" style="color: #38BDF8;">/mic.html</a></strong> en el celular del ayudante. La IA transcribirá las palabras en tiempo real.</p>
           </div>
         `;
       } else {
         micEntries.forEach(entry => this.appendTranscriptLine(entry, false));
       }
 
+      // Activar sincronización continua con el micrófono del celular transmisor
+      this.liveSpeechSource.startRemotePolling();
+
     } else if (targetMode === 'ai-audio') {
       // 2. Modo IA Transcribiendo MP3 en Vivo con Gemini
       this.liveSpeechSource.stopListening();
+      this.liveSpeechSource.stopRemotePolling();
       this.simulatedSource.enabled = false;
       if (this.simulatedSource.isPlaying) {
         this.simulatedSource.pause();
@@ -396,6 +400,7 @@ class App {
     } else {
       // 3. Modo Grabado Pre-sincronizado (Demostración instantánea)
       this.liveSpeechSource.stopListening();
+      this.liveSpeechSource.stopRemotePolling();
       this.aiAudioSource.enabled = false;
       this.simulatedSource.enabled = true;
 

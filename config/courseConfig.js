@@ -50,11 +50,23 @@ export const COURSE_CONFIG = {
         "Consumo intertemporal (hipótesis del ciclo de vida, ingreso permanente, tasa de descuento)",
         "Q de Tobin y determinantes de la inversión empresarial"
       ]
+    },
+    {
+      unitNumber: 4,
+      title: "Módulo STEM / Cálculo: Límites, Derivadas, Integrales y Aplicaciones",
+      summary: "Cálculo diferencial e integral para ingeniería y economía: límites, continuidad, asíntotas, derivadas (regla de la cadena, implícita, optimización, razones de cambio) e integrales (métodos de integración, sustitución, partes, Teorema Fundamental del Cálculo).",
+      topics: [
+        "Límites, continuidad, indeterminaciones (0/0, infinito/infinito) y regla de L'Hôpital",
+        "Derivadas, álgebra de derivadas, regla de la cadena y derivación implícita",
+        "Aplicaciones de la derivada: optimización, concavidad, puntos críticos y razones de cambio",
+        "Integrales indefinidas y definidas: métodos de sustitución e integración por partes",
+        "Teorema Fundamental del Cálculo, cálculo de áreas y aplicaciones matemáticas"
+      ]
     }
   ],
 
-  // Permite activar/desactivar unidades para demos específicas (ej: solo [2] o [1, 2, 3])
-  activeUnitNumbers: [1, 2, 3],
+  // Permite activar/desactivar unidades para demos específicas (incluye cálculo para pruebas STEM)
+  activeUnitNumbers: [1, 2, 3, 4],
 
   /**
    * Genera el texto formateado del alcance curricular activo para inyectar en el prompt del LLM.

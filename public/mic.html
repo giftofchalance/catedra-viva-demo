@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Cátedra Viva — Micrófono Docente (Transmisor)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0F172A;
+      --card: #1E293B;
+      --card-border: #334155;
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --primary: #3B82F6;
+      --primary-hover: #2563EB;
+      --danger: #EF4444;
+      --danger-hover: #DC2626;
+      --success: #10B981;
+      --warning: #F59E0B;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.25rem 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    header {
+      text-align: center;
+      padding: 0.5rem 0;
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93C5FD;
+      padding: 0.35rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    p.subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Main Record Action */
+    .record-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+
+    .btn-record {
+      width: 110px;
+      height: 110px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #EF4444, #B91C1C);
+      color: white;
+      font-size: 2.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 25px rgba(239, 68, 68, 0.4);
+      position: relative;
+    }
+
+    .btn-record:active {
+      transform: scale(0.95);
+    }
+
+    .btn-record.recording {
+      background: linear-gradient(135deg, #10B981, #047857);
+      box-shadow: 0 0 35px rgba(16, 185, 129, 0.6);
+      animation: pulse-ring 2s infinite;
+    }
+
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .record-status {
+      font-size: 1rem;
+      font-weight: 600;
+    }
+
+    .record-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.5rem;
+      color: #38BDF8;
+      font-weight: 700;
+    }
+
+    /* VU Meter Visualizer */
+    .vu-meter-container {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      height: 24px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      padding: 2px 4px;
+    }
+
+    .vu-bar {
+      height: 16px;
+      width: 0%;
+      background: linear-gradient(90deg, #10B981, #F59E0B 80%, #EF4444);
+      border-radius: 3px;
+      transition: width 0.08s ease-out;
+    }
+
+    /* Stats Grid */
+    .stats-row {
+      display: grid;
+      grid-template-grid: 1fr 1fr;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+      width: 100%;
+    }
+
+    .stat-pill {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--card-border);
+      border-radius: 0.5rem;
+      padding: 0.6rem;
+      text-align: center;
+    }
+
+    .stat-pill .val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .stat-pill .lbl {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-top: 0.15rem;
+    }
+
+    /* Live Transcript Feed on Mic Phone */
+    .feed-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .feed-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .feed-list {
+      max-height: 200px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .feed-item {
+      padding: 0.5rem 0.65rem;
+      background: rgba(15, 23, 42, 0.5);
+      border-left: 3px solid var(--primary);
+      border-radius: 0 0.35rem 0.35rem 0;
+    }
+
+    .feed-item .time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: #38BDF8;
+      display: block;
+      margin-bottom: 0.15rem;
+    }
+
+    .btn-reset {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      padding: 0.3rem 0.6rem;
+      border-radius: 0.35rem;
+      cursor: pointer;
+    }
+
+    .btn-reset:hover {
+      color: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .footer-links {
+      text-align: center;
+      margin-top: 0.5rem;
+    }
+
+    .footer-links a {
+      color: #38BDF8;
+      text-decoration: none;
+      font-size: 0.82rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-badge">🎙️ Modo Transmisor Docente</div>
+      <h1>Cátedra Viva — Audio en Vivo</h1>
+      <p class="subtitle">Este celular captura la voz del ayudante/profesor y alimenta la transcripción en tiempo real.</p>
+    </header>
+
+    <div class="card record-box">
+      <button id="btnToggleRecord" class="btn-record" aria-label="Iniciar o detener transmisión">
+        <span id="recordIcon">🎙️</span>
+      </button>
+      <div>
+        <div id="recordStatusText" class="record-status">Micrófono en espera</div>
+        <div id="timerDisplay" class="record-time">00:00</div>
+      </div>
+
+      <!-- VU Meter -->
+      <div class="vu-meter-container" title="Nivel de entrada de audio">
+        <div id="vuBar" class="vu-bar"></div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-pill">
+          <div id="statChunksSent" class="val">0</div>
+          <div class="lbl">Trozos Procesados</div>
+        </div>
+        <div class="stat-pill">
+          <div id="statLastLatency" class="val">-- ms</div>
+          <div class="lbl">Latencia Groq</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live Transcript Feedback on phone -->
+    <div class="card">
+      <div class="feed-header">
+        <div class="feed-title">
+          <span>📝 Lo que la IA va entendiendo:</span>
+        </div>
+        <button id="btnResetLecture" class="btn-reset">Limpiar clase</button>
+      </div>
+      <div id="feedList" class="feed-list">
+        <div style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 1rem 0;">
+          Presiona el micrófono para comenzar a hablar. Las intervenciones transcritas aparecerán aquí en segundos.
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-links">
+      <a href="/" target="_blank">👉 Abrir pantalla del Estudiante (Receptor)</a>
+    </div>
+  </div>
+
+  <script>
+    // Variables de estado
+    let isRecording = false;
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let audioContext = null;
+    let analyserNode = null;
+    let vuAnimationId = null;
+    let recordIntervalTimer = null;
+    let lectureSeconds = 0;
+    let chunksSentCount = 0;
+    let chunkCycleInterval = null;
+
+    const btnToggle = document.getElementById('btnToggleRecord');
+    const recordIcon = document.getElementById('recordIcon');
+    const recordStatusText = document.getElementById('recordStatusText');
+    const timerDisplay = document.getElementById('timerDisplay');
+    const vuBar = document.getElementById('vuBar');
+    const statChunksSent = document.getElementById('statChunksSent');
+    const statLastLatency = document.getElementById('statLastLatency');
+    const feedList = document.getElementById('feedList');
+    const btnReset = document.getElementById('btnResetLecture');
+
+    btnToggle.addEventListener('click', () => {
+      if (!isRecording) {
+        startTransmission();
+      } else {
+        stopTransmission();
+      }
+    });
+
+    btnReset.addEventListener('click', async () => {
+      if (confirm('¿Deseas reiniciar la transcripción en vivo para comenzar una clase nueva?')) {
+        try {
+          await fetch('/api/live-stream/reset', { method: 'POST' });
+          feedList.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; text-align: center; padding: 1rem 0;">Sesión reiniciada. Habla por el micrófono.</div>';
+          lectureSeconds = 0;
+          timerDisplay.textContent = '00:00';
+          chunksSentCount = 0;
+          statChunksSent.textContent = '0';
+        } catch (e) {
+          alert('Error reiniciando: ' + e.message);
+        }
+      }
+    });
+
+    async function startTransmission() {
+      try {
+        // Pedir permiso de micrófono con configuraciones de reducción de ruido
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+
+        // Configurar AudioSession en iOS si está disponible
+        if ("audioSession" in navigator) {
+          navigator.audioSession.type = "play-and-record";
+        }
+
+        // Configurar Analyser para VU Meter
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioContext = new AudioContextClass();
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        analyserNode = audioContext.createAnalyser();
+        analyserNode.fftSize = 256;
+        source.connect(analyserNode);
+        startVuMeter();
+
+        // Detectar MIME type óptimo
+        let mimeType = 'audio/webm';
+        if (!MediaRecorder.isTypeSupported('audio/webm')) {
+          if (MediaRecorder.isTypeSupported('audio/mp4')) {
+            mimeType = 'audio/mp4';
+          } else if (MediaRecorder.isTypeSupported('audio/ogg')) {
+            mimeType = 'audio/ogg';
+          } else {
+            mimeType = '';
+          }
+        }
+
+        isRecording = true;
+        btnToggle.classList.add('recording');
+        recordIcon.textContent = '⏹️';
+        recordStatusText.textContent = '🔴 En vivo transmitiendo...';
+        recordStatusText.style.color = '#10B981';
+
+        // Timer
+        recordIntervalTimer = setInterval(() => {
+          lectureSeconds++;
+          const mins = String(Math.floor(lectureSeconds / 60)).padStart(2, '0');
+          const secs = String(lectureSeconds % 60).padStart(2, '0');
+          timerDisplay.textContent = `${mins}:${secs}`;
+        }, 1000);
+
+        // Ciclo continuo de trozos de 4.5 segundos
+        // Se detiene e inicia cada 4.5s para garantizar cabeceras de contenedor válidas por chunk
+        startChunkingCycle(mimeType);
+
+      } catch (err) {
+        console.error('Error accediendo al micrófono:', err);
+        alert('No se pudo acceder al micrófono: ' + err.message + '\nAsegúrate de otorgar permisos.');
+      }
+    }
+
+    function startChunkingCycle(mimeType) {
+      function recordSingleChunk() {
+        if (!isRecording || !mediaStream) return;
+
+        try {
+          const options = mimeType ? { mimeType } : {};
+          const chunkRecorder = new MediaRecorder(mediaStream, options);
+          const audioChunks = [];
+
+          chunkRecorder.ondataavailable = (event) => {
+            if (event.data && event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          chunkRecorder.onstop = () => {
+            if (audioChunks.length > 0) {
+              const audioBlob = new Blob(audioChunks, { type: chunkRecorder.mimeType || 'audio/webm' });
+              sendChunkToServer(audioBlob, lectureSeconds);
+            }
+          };
+
+          chunkRecorder.start();
+
+          // Grabar por 4.5 segundos antes de cortar y enviar
+          setTimeout(() => {
+            if (chunkRecorder.state === 'recording') {
+              chunkRecorder.stop();
+            }
+          }, 4500);
+
+        } catch (e) {
+          console.error('Error en ciclo de chunk:', e);
+        }
+      }
+
+      // Ejecutar de inmediato y repetir cada 4.8 segundos
+      recordSingleChunk();
+      chunkCycleInterval = setInterval(recordSingleChunk, 4800);
+    }
+
+    async function sendChunkToServer(audioBlob, currentSeconds) {
+      const startTime = performance.now();
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'chunk.webm');
+      formData.append('elapsedSeconds', currentSeconds);
+
+      try {
+        const response = await fetch('/api/live-stream/chunk', {
+          method: 'POST',
+          body: formData
+        });
+
+        const latency = Math.round(performance.now() - startTime);
+        statLastLatency.textContent = `${latency} ms`;
+
+        if (response.ok) {
+          const data = await response.json();
+          chunksSentCount++;
+          statChunksSent.textContent = chunksSentCount;
+
+          if (data.text && data.text.trim()) {
+            addEntryToFeed(data.timestamp, data.text);
+          }
+        }
+      } catch (err) {
+        console.warn('Error enviando chunk al servidor:', err.message);
+      }
+    }
+
+    function addEntryToFeed(timestamp, text) {
+      if (feedList.children.length === 1 && feedList.children[0].innerText.includes('Presiona el micrófono')) {
+        feedList.innerHTML = '';
+      }
+
+      const item = document.createElement('div');
+      item.className = 'feed-item';
+      item.innerHTML = `
+        <span class="time">[${timestamp}]</span>
+        <span>${escapeHtml(text)}</span>
+      `;
+      feedList.prepend(item);
+    }
+
+    function startVuMeter() {
+      const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+
+      function updateMeter() {
+        if (!isRecording) return;
+        analyserNode.getByteFrequencyData(dataArray);
+
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+        const percent = Math.min(100, Math.round((average / 128) * 100));
+        vuBar.style.width = percent + '%';
+
+        vuAnimationId = requestAnimationFrame(updateMeter);
+      }
+
+      updateMeter();
+    }
+
+    function stopTransmission() {
+      isRecording = false;
+      btnToggle.classList.remove('recording');
+      recordIcon.textContent = '🎙️';
+      recordStatusText.textContent = 'Transmisión detenida';
+      recordStatusText.style.color = '#94A3B8';
+
+      if (chunkCycleInterval) {
+        clearInterval(chunkCycleInterval);
+        chunkCycleInterval = null;
+      }
+      if (recordIntervalTimer) {
+        clearInterval(recordIntervalTimer);
+        recordIntervalTimer = null;
+      }
+      if (vuAnimationId) {
+        cancelAnimationFrame(vuAnimationId);
+      }
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
+      }
+      vuBar.style.width = '0%';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

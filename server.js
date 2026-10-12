@@ -12,6 +12,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import multer from 'multer';
 
 import { COURSE_CONFIG } from './config/courseConfig.js';
 import { TRANSCRIPT_ENTRIES, FULL_TRANSCRIPT_TEXT } from './data/transcriptData.js';
@@ -19,12 +20,27 @@ import {
   answerLiveChat, 
   generatePostClassSummary, 
   answerPostClassQuery,
-  transcribeAudioChunk
+  transcribeAudioChunk,
+  transcribeLiveAudioBuffer
 } from './services/llmService.js';
 import { analyticsService } from './services/analyticsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Configuración de almacenamiento temporal para uploads de audio
+const uploadDir = path.join(__dirname, 'temp_uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const upload = multer({ dest: uploadDir });
+
+// Estado en memoria para el streaming en vivo desde el micrófono del ayudante
+let liveLectureState = {
+  isActive: false,
+  entries: [],
+  totalChunks: 0
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -100,6 +116,83 @@ app.post('/api/transcribe-chunk', async (req, res) => {
 });
 
 /**
+ * 2.2 Streaming en Vivo desde Micrófono Móvil (PoC 2 Celulares)
+ * Recibe fragmentos de audio de 3 a 5 segundos grabados desde el celular del ayudante.
+ */
+app.post('/api/live-stream/chunk', upload.single('audio'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió archivo de audio' });
+    }
+
+    const elapsedSeconds = Number(req.body.elapsedSeconds) || (liveLectureState.entries.length * 5);
+    const audioBuffer = fs.readFileSync(req.file.path);
+    
+    // Transcribir con Groq Whisper Large v3 Turbo en ~0.3s
+    const text = await transcribeLiveAudioBuffer(
+      audioBuffer, 
+      req.file.mimetype || 'audio/webm',
+      'Cátedra universitaria de matemáticas y cálculo: derivadas, integrales, límites, diferenciales dx, funciones, álgebra.'
+    );
+
+    // Limpiar archivo temporal de inmediato
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+
+    liveLectureState.totalChunks++;
+    liveLectureState.isActive = true;
+
+    let newEntry = null;
+    const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
+    const secs = String(elapsedSeconds % 60).padStart(2, '0');
+    const timestamp = `${mins}:${secs}`;
+
+    if (text && text.trim()) {
+      newEntry = {
+        id: `live-${Date.now()}-${liveLectureState.entries.length}`,
+        timestamp,
+        seconds: elapsedSeconds,
+        speaker: 'Profesor / Ayudante (En Vivo)',
+        text: text.trim()
+      };
+      liveLectureState.entries.push(newEntry);
+      console.log(`[Live Mic] 🎙️ [${timestamp}] "${text.trim()}"`);
+    }
+
+    res.json({
+      success: true,
+      text: text || '',
+      timestamp,
+      newEntry,
+      totalEntries: liveLectureState.entries.length
+    });
+  } catch (error) {
+    console.error('Error en /api/live-stream/chunk:', error);
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/live-stream/entries', (req, res) => {
+  const fullText = liveLectureState.entries.map(e => `[${e.timestamp}] ${e.text}`).join('\n');
+  res.json({
+    isActive: liveLectureState.isActive,
+    totalEntries: liveLectureState.entries.length,
+    entries: liveLectureState.entries,
+    fullText
+  });
+});
+
+app.post('/api/live-stream/reset', (req, res) => {
+  liveLectureState.entries = [];
+  liveLectureState.totalChunks = 0;
+  liveLectureState.isActive = false;
+  console.log('[Live Mic] 🔄 Sesión de micrófono reiniciada');
+  res.json({ success: true, message: 'Sesión en vivo reiniciada exitosamente' });
+});
+
+/**
  * 3. Chat en Vivo (Lógica pedagógica acotada)
  * Recibe: { question, revealedTranscript, currentTimeFormatted }
  */
@@ -111,9 +204,19 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'La pregunta no puede estar vacía' });
     }
 
+    let effectiveTranscript = revealedTranscript || '';
+    if (liveLectureState.entries.length > 0) {
+      const liveText = liveLectureState.entries.map(e => `[${e.timestamp}] ${e.speaker}: ${e.text}`).join('\n');
+      if (effectiveTranscript.trim()) {
+        effectiveTranscript = `[TRANSCRIPCIÓN EN VIVO DEL MICRÓFONO]:\n${liveText}\n\n[CONTEXTO ADICIONAL]:\n${effectiveTranscript}`;
+      } else {
+        effectiveTranscript = liveText;
+      }
+    }
+
     const answer = await answerLiveChat({
       question: question.trim(),
-      revealedTranscript: revealedTranscript || '',
+      revealedTranscript: effectiveTranscript,
       currentTimeFormatted: currentTimeFormatted || '00:00:00'
     });
 

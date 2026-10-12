@@ -253,18 +253,24 @@ REGLAS DE RESPUESTA CRÍTICAS (DEBES SEGUIRLAS ESTRICTAMENTE):
    - Sintetiza basándote ÚNICAMENTE en el texto de la transcripción revelada hasta el momento. Si piden los últimos minutos, calcula el fragmento correspondiente a ese intervalo temporal.
 
 3. PREGUNTAS SOBRE EL CONTENIDO DEL CURSO:
-   - SI ESTÁ EN LA TRANSCRIPCIÓN REVELADA:
-     Responde directamente explicando el concepto en base a lo que el docente explicó en la clase.
-   
-   - SI NO ESTÁ EN LA TRANSCRIPCIÓN REVELADA (por ejemplo, temas de otras unidades como el modelo de Solow, consumo intertemporal, AS/AD, o conceptos del curso que el docente aún no ha mencionado en esta sesión):
-     Responde a la duda con claridad pedagógica,
-     PERO DEBES anteponer de forma destacada y obligatoria el siguiente disclaimer textual:
-     "> ⚠️ **Aviso:** Esto no lo dijo el profesor en esta clase, es una explicación general — probablemente lo explique con más detalle más adelante."
+   A. PREGUNTAS CONCEPTUALES O DE DEFINICIÓN (ej. "¿Qué es la curva LM?", "¿Qué es la regla de la cadena?", "¿Qué es una asíntota?"):
+      - Si está en la transcripción revelada: Responde directamente explicando el concepto en base a lo que el docente explicó en la clase.
+      - Si NO está en la transcripción revelada (conceptos de otras unidades o temas generales del programa):
+        Responde a la duda con claridad pedagógica y rigor, pero DEBES anteponer de forma destacada y obligatoria el siguiente disclaimer textual:
+        "> ⚠️ **Aviso:** Esto no lo dijo el profesor en esta clase, es una explicación general — probablemente lo explique con más detalle más adelante."
+
+   B. RESOLUCIÓN DE EJERCICIOS O DUDAS PRÁCTICAS (ESCALERA DE ANDAMIAJE SOCRÁTICO EN 5 NIVELES):
+      En asignaturas analíticas o STEM (ej. Cálculo o Macroeconomía cuantitativa), NO entregues la solución final en el primer intento para evitar la atrofia del aprendizaje, pero NUNCA bloquees al estudiante con un muro de respuestas evasivas:
+      - Nivel 1 (Pista Conceptual / Estrategia): Si el alumno solo da el enunciado ("cómo derivo esto", "cómo calculo esta integral"), sugiere el método o teorema adecuado (ej. partes, sustitución, regla del producto) y pregúntale por el primer paso.
+      - Nivel 2 (Pista Procedimental): Si el estudiante propone un inicio o pregunta por dónde empezar, guía el planteamiento inicial (ej. la elección de $u$ y $dv$, o el cambio de variable).
+      - Nivel 3 (Diagnóstico de Error): Si el estudiante presenta un intento con error, identifica puntualmente la equivocación (ej. signos, potencias, derivadas internas) con tono constructivo.
+      - Nivel 4 (Solución Parcial Guiada): Si el estudiante sigue con dificultades, muestra la primera mitad del desarrollo (50%) y pídele que remate el cálculo final.
+      - Nivel 5 (Resolución Completa con Cierre Metacognitivo): Si el alumno explícitamente se rinde o insiste ("ya lo intenté y no entiendo, muéstrame el desarrollo completo"), MUESTRA LA SOLUCIÓN COMPLETA PASO A PASO con explicaciones claras en LaTeX, pero CIERRA OBLIGATORIAMENTE con una breve pregunta de verificación conceptual para asegurar que comprendió el procedimiento.
 
 4. FORMATO MATEMÁTICO (KATEX / LATEX OBLIGATORIO):
-   Usa SIEMPRE notación matemática estándar en LaTeX para todas las variables y fórmulas macroeconómicas, delimitando fórmulas en línea con $formula$ (ejemplo: $i$, $Y$, $i^*$, $Y^*$, $Y = C + I + G$, $M/P = L(Y, i)$) y fórmulas principales en bloque con $$formula$$ para que se rendericen automáticamente con KaTeX.
+   Usa SIEMPRE notación matemática estándar en LaTeX para todas las variables, fórmulas y expresiones (macroeconomía y cálculo), delimitando fórmulas en línea con $formula$ (ejemplo: $f(x)$, $\frac{df}{dx}$, $\int x^2 dx$, $Y = C + I + G$) y fórmulas principales en bloque con $$formula$$ para que se rendericen automáticamente con KaTeX.
 
-Tono: Académico, riguroso, claro y didáctico.`;
+Tono: Académico, empático, riguroso, claro y pedagógico.`;
 
   const userPrompt = `[ESTADO ACTUAL DE LA CLASE]
 Tiempo transcurrido en la simulación: ${currentTimeFormatted || 'En curso'}
@@ -527,3 +533,99 @@ Devuelve ÚNICAMENTE el texto que se pronuncia en este trozo, sin comillas, sin 
     throw err;
   }
 }
+
+/**
+ * 6. Transcripción directa de buffers de audio en streaming (Modo Micrófono en Vivo)
+ * Optimizado para trozos de 3-5 segundos enviados desde teléfonos móviles.
+ */
+export async function transcribeLiveAudioBuffer(audioBuffer, mimeType = 'audio/webm', promptHint = '') {
+  const effectiveGroqKey = process.env.GROQ_API_KEY || GROQ_API_KEY;
+  const effectiveGeminiKey = process.env.GEMINI_API_KEY || GEMINI_API_KEY;
+
+  const defaultPrompt = promptHint || 'Cátedra universitaria de matemáticas y cálculo: derivadas, integrales, límites, diferenciales dx, sustitución, funciones, álgebra, teoremas, modelos.';
+
+  // 1. Intentar con Groq Whisper Large v3 Turbo (ultra-rápido ~0.3s)
+  if (effectiveGroqKey) {
+    const models = ['whisper-large-v3-turbo', 'whisper-large-v3'];
+    for (const model of models) {
+      try {
+        const formData = new FormData();
+        const extension = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+        formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${extension}`);
+        formData.append('model', model);
+        formData.append('language', 'es');
+        formData.append('response_format', 'json');
+        formData.append('prompt', defaultPrompt);
+
+        let groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${effectiveGroqKey}` },
+          body: formData
+        });
+
+        if (groqRes.status === 429) {
+          await new Promise(r => setTimeout(r, 2000));
+          groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${effectiveGroqKey}` },
+            body: formData
+          });
+        }
+
+        if (groqRes.ok) {
+          const groqData = await groqRes.json();
+          let text = groqData.text?.trim() || '';
+          if (text) {
+            text = text.replace(/^["'«“]|["'»”]$/g, '').trim();
+            const low = text.toLowerCase();
+            // Filtrar alucinaciones comunes de silencio en Whisper
+            if (low.includes('subtítulos por') || low.includes('amara.org') || low.includes('gracias por ver') || low.includes('suscri')) {
+              return '';
+            }
+            return text;
+          }
+        }
+      } catch (err) {
+        console.warn(`[transcribeLiveAudioBuffer] Error con Groq (${model}):`, err.message);
+      }
+    }
+  }
+
+  // 2. Fallback a Gemini si Groq no responde
+  if (effectiveGeminiKey) {
+    try {
+      const base64Audio = audioBuffer.toString('base64');
+      const prompt = `Transcribe exactamente lo que se habla en este audio de clase en español. Si solo hay silencio, ruido de fondo o no hay habla comprensible, responde únicamente la palabra: SILENCIO.`;
+      const body = {
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Audio } }
+            ]
+          }
+        ],
+        generationConfig: { temperature: 0.1 }
+      };
+
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${effectiveGeminiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        let text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        if (text && !text.toUpperCase().includes('SILENCIO')) {
+          return text;
+        }
+      }
+    } catch (e) {
+      console.warn('[transcribeLiveAudioBuffer] Error en fallback Gemini:', e.message);
+    }
+  }
+
+  return '';
+}
+

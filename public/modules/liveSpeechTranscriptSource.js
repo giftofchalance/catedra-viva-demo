@@ -207,10 +207,70 @@ export class LiveSpeechTranscriptSource extends TranscriptSource {
 
   reset() {
     this.stopListening();
+    this.stopRemotePolling();
     this.entries = [];
     this.currentIndex = 0;
     this.elapsedSeconds = 0;
     this.notify('reset', this.getState());
+  }
+
+  /**
+   * Sincronización en tiempo real con el servidor:
+   * Recibe las frases que el ayudante/docente va hablando desde su celular (/mic.html)
+   */
+  startRemotePolling() {
+    if (this.pollInterval) return;
+
+    // Ejecutar inmediatamente
+    this.fetchRemoteEntries();
+
+    this.pollInterval = setInterval(() => {
+      this.fetchRemoteEntries();
+    }, 2200);
+  }
+
+  async fetchRemoteEntries() {
+    try {
+      const response = await fetch('/api/live-stream/entries');
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (Array.isArray(data.entries) && data.entries.length > 0) {
+        let hasNew = false;
+        data.entries.forEach(serverEntry => {
+          const exists = this.entries.some(e => 
+            e.id === serverEntry.id || 
+            (e.timestamp === serverEntry.timestamp && e.text === serverEntry.text)
+          );
+
+          if (!exists) {
+            this.entries.push(serverEntry);
+            this.currentIndex = this.entries.length;
+            hasNew = true;
+            this.notify('lineRevealed', {
+              entry: serverEntry,
+              state: this.getState()
+            });
+          }
+        });
+
+        if (hasNew && data.entries.length > 0) {
+          const last = data.entries[data.entries.length - 1];
+          if (last.seconds && last.seconds > this.elapsedSeconds) {
+            this.elapsedSeconds = last.seconds;
+          }
+        }
+      }
+    } catch (e) {
+      // Ignorar errores transitorios de red
+    }
+  }
+
+  stopRemotePolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
   }
 
   getRevealedText() {
