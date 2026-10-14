@@ -142,11 +142,55 @@ class App {
       // 5. Vincular controles de la interfaz y selector de modo
       this.bindControls();
       this.setupModeSwitcher();
+      this.setupMobileColumnSwitcher();
 
     } catch (err) {
       console.error('Error inicializando la aplicación:', err);
       alert('Error conectando con el backend local. Asegúrate de que el servidor Node/Express esté activo.');
     }
+  }
+
+  setupMobileColumnSwitcher() {
+    const colBtnTranscript = document.getElementById('colBtnTranscript');
+    const colBtnChat = document.getElementById('colBtnChat');
+    const transcriptPanel = document.querySelector('.transcript-panel');
+    const chatPanel = document.querySelector('.chat-panel');
+
+    if (!colBtnTranscript || !colBtnChat || !transcriptPanel || !chatPanel) return;
+
+    colBtnTranscript.addEventListener('click', () => {
+      colBtnTranscript.classList.add('active');
+      colBtnChat.classList.remove('active');
+      transcriptPanel.classList.remove('mobile-hidden');
+      chatPanel.classList.add('mobile-hidden');
+    });
+
+    colBtnChat.addEventListener('click', () => {
+      colBtnChat.classList.add('active');
+      colBtnTranscript.classList.remove('active');
+      chatPanel.classList.remove('mobile-hidden');
+      transcriptPanel.classList.add('mobile-hidden');
+    });
+
+    // En pantallas de celular, mostrar la transcripción por defecto
+    if (window.innerWidth <= 850) {
+      chatPanel.classList.add('mobile-hidden');
+    }
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 850) {
+        transcriptPanel.classList.remove('mobile-hidden');
+        chatPanel.classList.remove('mobile-hidden');
+      } else {
+        if (colBtnTranscript.classList.contains('active')) {
+          transcriptPanel.classList.remove('mobile-hidden');
+          chatPanel.classList.add('mobile-hidden');
+        } else {
+          chatPanel.classList.remove('mobile-hidden');
+          transcriptPanel.classList.add('mobile-hidden');
+        }
+      }
+    });
   }
 
   setupAudioListeners() {

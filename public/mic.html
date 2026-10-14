@@ -313,12 +313,25 @@
       </div>
     </div>
 
-    <div class="footer-links">
-      <a href="/" target="_blank">👉 Abrir pantalla del Estudiante (Receptor)</a>
+    <div class="footer-links" style="display: flex; flex-direction: column; gap: 0.5rem; text-align: center; margin-top: 0.75rem;">
+      <a href="/" target="_blank" style="color: #38BDF8; text-decoration: none; font-size: 0.88rem; font-weight: 600;">
+        👉 Abrir pantalla del Estudiante (Receptor)
+      </a>
+      <button id="btnCopyStudentLink" type="button" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38BDF8; padding: 0.45rem 0.8rem; border-radius: 6px; font-size: 0.8rem; cursor: pointer;">
+        📋 Copiar enlace de la clase para tu amigo
+      </button>
     </div>
   </div>
 
   <script>
+    document.getElementById('btnCopyStudentLink')?.addEventListener('click', () => {
+      const url = window.location.origin;
+      navigator.clipboard.writeText(url).then(() => {
+        alert('¡Enlace copiado al portapapeles! Tu amigo debe abrirlo en su celular:\n' + url);
+      }).catch(() => {
+        prompt('Copia este enlace para tu amigo:', url);
+      });
+    });
     // Variables de estado
     let isRecording = false;
     let mediaStream = null;

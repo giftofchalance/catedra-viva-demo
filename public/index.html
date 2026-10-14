@@ -51,6 +51,10 @@
         <span class="tab-icon">📊</span>
         4. Dashboard Profesor
       </button>
+      <a href="/mic.html" target="_blank" class="nav-mic-btn" id="navMicBtn" title="Abrir micrófono para transmitir desde el celular">
+        <span class="mic-dot-pulse"></span>
+        <span>🎙️ Micrófono Celular</span>
+      </a>
     </nav>
   </header>
 
@@ -61,6 +65,31 @@
          VISTA 1: CLASE EN CURSO (Transmisión + Chat)
          ========================================== -->
     <section id="view-live" class="view-panel active">
+      
+      <!-- Banner Destacado: Transmisor de Celular para Ayudante/Profesor -->
+      <div class="mobile-transmitter-callout" id="mobileTransmitterCallout">
+        <div class="callout-content">
+          <span class="callout-badge">NUEVO • TRANSMISOR DE CÁTEDRA</span>
+          <div class="callout-text">
+            <strong>¿Vas a dar la clase o transmitir audio?</strong>
+            <span>Usa un celular como micrófono para alimentar la transcripción en vivo con IA.</span>
+          </div>
+        </div>
+        <a href="/mic.html" target="_blank" class="callout-action-btn">
+          🎙️ Abrir Micrófono Móvil ➔
+        </a>
+      </div>
+
+      <!-- Switcher de Columnas para Pantallas Móviles -->
+      <div class="mobile-col-switcher" id="mobileColSwitcher">
+        <button class="col-switcher-btn active" data-col="transcript" id="colBtnTranscript">
+          📝 Transcripción de Clase
+        </button>
+        <button class="col-switcher-btn" data-col="chat" id="colBtnChat">
+          💬 Tutor IA en Vivo
+        </button>
+      </div>
+
       <div class="live-layout">
         
         <!-- Panel Izquierdo: Transcripción en Vivo -->
