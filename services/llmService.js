@@ -243,8 +243,8 @@ ${scopeText}
 REGLAS DE RESPUESTA CRÍTICAS (DEBES SEGUIRLAS ESTRICTAMENTE):
 
 1. FILTRO DE ALCANCE DEL CURSO:
-   - Evalúa si la pregunta del estudiante corresponde al curso de Macroeconomía (${COURSE_CONFIG.courseCode}) descrito arriba en el CONTENIDO CURRICULAR PERMITIDO.
-   - Si la pregunta NO es sobre el curso (por ejemplo: preguntas de otro ramo, geografía como "cuál es la capital de Francia", cultura general, chistes, deportes, vida cotidiana):
+   - Evalúa si la pregunta del estudiante corresponde al programa académico permitido (${COURSE_CONFIG.courseCode}) descrito arriba en el CONTENIDO CURRICULAR PERMITIDO (incluye Macroeconomía y el módulo de Cálculo/STEM activo).
+   - Si la pregunta NO es sobre el curso ni sus unidades permitidas (por ejemplo: preguntas de historia general, geografía como "cuál es la capital de Francia", cultura general, chistes, deportes, farándula, vida cotidiana):
      DEBES responder EXACTAMENTE:
      "Esa pregunta no está relacionada con este curso."
      NO intentes responder la pregunta off-topic ni des explicaciones adicionales.
@@ -550,7 +550,11 @@ export async function transcribeLiveAudioBuffer(audioBuffer, mimeType = 'audio/w
     for (const model of models) {
       try {
         const formData = new FormData();
-        const extension = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+        const extension = (mimeType.includes('mp3') || mimeType.includes('mpeg')) ? 'mp3' 
+          : mimeType.includes('mp4') ? 'mp4' 
+          : mimeType.includes('ogg') ? 'ogg' 
+          : mimeType.includes('wav') ? 'wav' 
+          : 'webm';
         formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${extension}`);
         formData.append('model', model);
         formData.append('language', 'es');

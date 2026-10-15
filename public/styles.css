@@ -2028,6 +2028,37 @@ body {
   animation: pulse-ring 1.5s infinite;
 }
 
+/* Botón en el header para el laboratorio de simulación dual */
+.nav-simulator-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: linear-gradient(135deg, #7C3AED, #6D28D9);
+  color: #FFFFFF !important;
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 5px rgba(124, 58, 237, 0.3);
+  white-space: nowrap;
+}
+
+.nav-simulator-btn:hover {
+  background: linear-gradient(135deg, #6D28D9, #5B21B6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(124, 58, 237, 0.4);
+}
+
+.sim-dot-pulse {
+  width: 8px;
+  height: 8px;
+  background-color: #A78BFA;
+  border-radius: 50%;
+  animation: pulse-ring 1.8s infinite;
+}
+
 /* Banner de llamado a la acción para el transmisor móvil */
 .mobile-transmitter-callout {
   background: linear-gradient(135deg, #0F172A, #1E293B);

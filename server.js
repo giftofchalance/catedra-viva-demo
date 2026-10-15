@@ -13,6 +13,11 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import multer from 'multer';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import ffmpegPath from 'ffmpeg-static';
+
+const execFileAsync = promisify(execFile);
 
 import { COURSE_CONFIG } from './config/courseConfig.js';
 import { TRANSCRIPT_ENTRIES, FULL_TRANSCRIPT_TEXT } from './data/transcriptData.js';
@@ -56,6 +61,16 @@ app.get('/audio/clase.mp3', (req, res) => {
     res.sendFile(audioPath);
   } else {
     res.status(404).json({ error: 'Archivo de audio no encontrado' });
+  }
+});
+
+// Servir archivo de audio de la clase de Cálculo
+const calculusAudioPath = path.join(__dirname, 'Clase_Calculo_Derivadas.mp3');
+app.get('/audio/calculo.mp3', (req, res) => {
+  if (fs.existsSync(calculusAudioPath)) {
+    res.sendFile(calculusAudioPath);
+  } else {
+    res.status(404).json({ error: 'Archivo de audio de cálculo no encontrado' });
   }
 });
 
@@ -190,6 +205,74 @@ app.post('/api/live-stream/reset', (req, res) => {
   liveLectureState.isActive = false;
   console.log('[Live Mic] 🔄 Sesión de micrófono reiniciada');
   res.json({ success: true, message: 'Sesión en vivo reiniciada exitosamente' });
+});
+
+/**
+ * Endpoint de Simulación: Avanza la clase cortando y transcribiendo N segundos del audio
+ * Recibe: { course: 'macro' | 'calculo', startSecond: number, durationSeconds: number }
+ */
+app.post('/api/simulator/step-chunk', async (req, res) => {
+  let tempOut = null;
+  try {
+    const { course = 'macro', startSecond = 0, durationSeconds = 5 } = req.body;
+    const targetFile = course === 'calculo' ? calculusAudioPath : audioPath;
+
+    if (!fs.existsSync(targetFile)) {
+      return res.status(404).json({ error: `Archivo de audio para '${course}' no encontrado en el servidor.` });
+    }
+
+    tempOut = path.join(uploadDir, `sim_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`);
+    
+    // Cortar fragmento exacto de audio con ffmpeg
+    await execFileAsync(ffmpegPath, [
+      '-ss', String(startSecond),
+      '-t', String(durationSeconds),
+      '-i', targetFile,
+      '-acodec', 'libmp3lame',
+      '-y',
+      tempOut
+    ]);
+
+    const audioBuffer = fs.readFileSync(tempOut);
+    try { fs.unlinkSync(tempOut); tempOut = null; } catch (_) {}
+
+    // Transcribir con Groq Whisper (con fallback a Gemini)
+    const text = await transcribeLiveAudioBuffer(audioBuffer, 'audio/mp3');
+
+    const m = Math.floor(startSecond / 60);
+    const s = Math.floor(startSecond % 60);
+    const timestamp = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+
+    let newEntry = null;
+    if (text && text.trim().length > 0) {
+      newEntry = {
+        timestamp,
+        speaker: course === 'calculo' ? 'Prof. Cálculo' : 'Prof. Macroeconomía',
+        text: text.trim(),
+        receivedAt: new Date().toISOString()
+      };
+      liveLectureState.entries.push(newEntry);
+      liveLectureState.totalChunks++;
+      liveLectureState.isActive = true;
+      console.log(`[Simulator Chunk] [${timestamp}] (${course}): "${text.trim().substring(0, 70)}..."`);
+    }
+
+    res.json({
+      success: true,
+      timestamp,
+      text: text ? text.trim() : '',
+      newEntry,
+      totalEntries: liveLectureState.entries.length,
+      nextSeconds: startSecond + durationSeconds,
+      course
+    });
+  } catch (error) {
+    console.error('Error en /api/simulator/step-chunk:', error);
+    if (tempOut && fs.existsSync(tempOut)) {
+      try { fs.unlinkSync(tempOut); } catch (_) {}
+    }
+    res.status(500).json({ error: error.message });
+  }
 });
 
 /**
