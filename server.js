@@ -1,9 +1,13 @@
 /**
- * Servidor Backend en Node/Express para Cátedra Viva
+ * Servidor Backend en Node/Express para Cátedra Viva (V2 Clean-Slate)
  * 
- * - Las API keys (GEMINI_API_KEY / OPENAI_API_KEY) quedan 100% protegidas en este servidor y NUNCA expuestas al cliente.
- * - Sirve la aplicación web estática (HTML/CSS/JS).
- * - Expone endpoints REST para chat en vivo acotado, resumen post-clase y analíticas anónimas.
+ * - Las claves de API (GROQ_API_KEY / GEMINI_API_KEY) permanecen en el servidor.
+ * - Sirve la nueva interfaz limpia en /public (index.html, teacher.html, student.html).
+ * - Orquesta:
+ *   1. Streaming de audio desde el teléfono docente con Whisper Large v3 Turbo + Glosario.
+ *   2. Micro-labeling semántico y Smart Chapters (Read.ai style).
+ *   3. Controles docentes en vivo: Modo Pizarra (pausa de chat), switch de Complemento IA, filtro de digresiones.
+ *   4. RAG Histórico multiclase y cierre de clases hacia la memoria permanente del curso.
  */
 
 import 'dotenv/config';
@@ -19,32 +23,51 @@ import ffmpegPath from 'ffmpeg-static';
 
 const execFileAsync = promisify(execFile);
 
-import { COURSE_CONFIG } from './config/courseConfig.js';
-import { TRANSCRIPT_ENTRIES, FULL_TRANSCRIPT_TEXT } from './data/transcriptData.js';
 import { 
-  answerLiveChat, 
-  generatePostClassSummary, 
-  answerPostClassQuery,
-  transcribeAudioChunk,
-  transcribeLiveAudioBuffer
-} from './services/llmService.js';
-import { analyticsService } from './services/analyticsService.js';
+  getCoursesList, 
+  getCourse, 
+  recordClosedClass, 
+  addCourseMaterial 
+} from './data/coursesDb.js';
+
+import {
+  transcribeLiveAudio,
+  labelAndCleanSegment,
+  calculatePaceMetrics,
+  answerStudentQuestion,
+  generateClassSummary
+} from './services/aiEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuración de almacenamiento temporal para uploads de audio
+// Directorio temporal para uploads
 const uploadDir = path.join(__dirname, 'temp_uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 const upload = multer({ dest: uploadDir });
 
-// Estado en memoria para el streaming en vivo desde el micrófono del ayudante
-let liveLectureState = {
+// Estado en memoria de la sesión activa
+let activeCourseId = 'macro'; // 'macro' | 'probabilidades' | 'finanzas'
+
+let liveSession = {
   isActive: false,
+  courseId: activeCourseId,
+  classTitle: 'Clase en Vivo',
+  startTime: null,
+  elapsedSeconds: 0,
   entries: [],
-  totalChunks: 0
+  chapters: [
+    { minute: '00:00', title: 'Apertura y Objetivos' }
+  ],
+  lostAlerts: [], // Array de { timestamp, count }
+  teacherSettings: {
+    chatState: 'active', // 'active' | 'paused' (Modo Pizarra)
+    allowComplement: true, // Recuadro violeta de conocimiento IA
+    hideDigressions: true, // Ocultar anécdotas/desvaríos en la vista alumno
+    noiseGateThreshold: -35 // dBFS en frontend
+  }
 };
 
 const app = express();
@@ -54,134 +77,185 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Servir archivo de audio de la clase
-const audioPath = path.join(__dirname, 'Modelo IS-LM - Explicado para principiantes!.mp3');
+// Archivos de audio pregrabados para simulaciones
+const audioMacroPath = path.join(__dirname, 'Modelo IS-LM - Explicado para principiantes!.mp3');
+const audioCalculusPath = path.join(__dirname, 'Clase_Calculo_Derivadas.mp3');
+
 app.get('/audio/clase.mp3', (req, res) => {
-  if (fs.existsSync(audioPath)) {
-    res.sendFile(audioPath);
-  } else {
-    res.status(404).json({ error: 'Archivo de audio no encontrado' });
-  }
+  if (fs.existsSync(audioMacroPath)) res.sendFile(audioMacroPath);
+  else res.status(404).json({ error: 'Audio macro no encontrado' });
 });
 
-// Servir archivo de audio de la clase de Cálculo
-const calculusAudioPath = path.join(__dirname, 'Clase_Calculo_Derivadas.mp3');
 app.get('/audio/calculo.mp3', (req, res) => {
-  if (fs.existsSync(calculusAudioPath)) {
-    res.sendFile(calculusAudioPath);
-  } else {
-    res.status(404).json({ error: 'Archivo de audio de cálculo no encontrado' });
-  }
+  if (fs.existsSync(audioCalculusPath)) res.sendFile(audioCalculusPath);
+  else res.status(404).json({ error: 'Audio cálculo no encontrado' });
 });
 
-/**
- * 1. Configuración del Curso (Alcance temático)
- */
-app.get('/api/config', (req, res) => {
+// Rutas de Vistas Principales
+app.get('/profesor', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'teacher.html'));
+});
+
+app.get('/estudiante', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'student.html'));
+});
+
+app.get('/simulador', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'simulator.html'));
+});
+
+// --------------------------------------------------------------------------
+// API 1: CURSOS Y ESTADO GLOBAL DE LA SALA
+// --------------------------------------------------------------------------
+
+app.get('/api/courses', (req, res) => {
   res.json({
-    courseCode: COURSE_CONFIG.courseCode,
-    courseName: COURSE_CONFIG.courseName,
-    institution: COURSE_CONFIG.institution,
-    description: COURSE_CONFIG.description,
-    units: COURSE_CONFIG.units,
-    activeUnitNumbers: COURSE_CONFIG.activeUnitNumbers,
-    scopePromptText: COURSE_CONFIG.getScopePromptText()
+    activeCourseId,
+    courses: getCoursesList()
   });
 });
 
-/**
- * Endpoint para modificar dinámicamente las unidades activas (para demostraciones en vivo de cómo cambia el alcance)
- */
-app.post('/api/config/active-units', (req, res) => {
-  const { activeUnitNumbers } = req.body;
-  if (Array.isArray(activeUnitNumbers) && activeUnitNumbers.length > 0) {
-    COURSE_CONFIG.activeUnitNumbers = activeUnitNumbers.map(Number);
-    return res.json({ 
-      success: true, 
-      activeUnitNumbers: COURSE_CONFIG.activeUnitNumbers,
-      scopePromptText: COURSE_CONFIG.getScopePromptText()
-    });
-  }
-  res.status(400).json({ error: 'Debe especificar un arreglo válido de números de unidad' });
+app.post('/api/courses/select', (req, res) => {
+  const { courseId } = req.body;
+  if (!courseId) return res.status(400).json({ error: 'courseId es requerido' });
+
+  activeCourseId = courseId;
+  liveSession.courseId = courseId;
+  liveSession.entries = [];
+  liveSession.lostAlerts = [];
+  liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+  liveSession.elapsedSeconds = 0;
+  liveSession.isActive = false;
+
+  console.log(`[Cátedra Viva] Ramo activo cambiado a: ${courseId}`);
+  res.json({ success: true, activeCourse: getCourse(activeCourseId) });
 });
 
-/**
- * 2. Transcripción completa y estructurada
- */
-app.get('/api/transcript', (req, res) => {
+app.get('/api/live/state', (req, res) => {
+  const course = getCourse(activeCourseId);
+  const pace = calculatePaceMetrics(liveSession.entries);
+
   res.json({
-    totalEntries: TRANSCRIPT_ENTRIES.length,
-    entries: TRANSCRIPT_ENTRIES,
-    fullText: FULL_TRANSCRIPT_TEXT
+    course,
+    teacherSettings: liveSession.teacherSettings,
+    isActive: liveSession.isActive,
+    elapsedSeconds: liveSession.elapsedSeconds,
+    entries: liveSession.entries,
+    chapters: liveSession.chapters,
+    lostCountTotal: liveSession.lostAlerts.reduce((acc, curr) => acc + (curr.count || 1), 0),
+    lostAlertsRecent: liveSession.lostAlerts.slice(-5),
+    pace
   });
 });
 
-/**
- * 2.1 Transcripción real en tiempo real de fragmentos de audio MP3 con Gemini
- */
-app.post('/api/transcribe-chunk', async (req, res) => {
-  try {
-    const { startSeconds = 0, durationSeconds = 6 } = req.body;
-    const chunk = await transcribeAudioChunk(Number(startSeconds), Number(durationSeconds));
-    res.json(chunk);
-  } catch (error) {
-    console.error('Error en /api/transcribe-chunk:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+// --------------------------------------------------------------------------
+// API 2: INGESTA DE AUDIO (DESDE CELULAR / MICRÓFONO DOCENTE)
+// --------------------------------------------------------------------------
 
-/**
- * 2.2 Streaming en Vivo desde Micrófono Móvil (PoC 2 Celulares)
- * Recibe fragmentos de audio de 3 a 5 segundos grabados desde el celular del ayudante.
- */
-app.post('/api/live-stream/chunk', upload.single('audio'), async (req, res) => {
+app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
+  let tempConverted = null;
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No se recibió archivo de audio' });
     }
 
-    const elapsedSeconds = Number(req.body.elapsedSeconds) || (liveLectureState.entries.length * 5);
-    const audioBuffer = fs.readFileSync(req.file.path);
-    
-    // Transcribir con Groq Whisper Large v3 Turbo en ~0.3s
-    const text = await transcribeLiveAudioBuffer(
+    const { elapsedSeconds = 0, isPrimarySpeaker = 'true' } = req.body;
+    const currentCourse = getCourse(activeCourseId);
+
+    // Convertir con ffmpeg a MP3 limpio mono 16kHz
+    tempConverted = path.join(uploadDir, `chunk_${Date.now()}_clean.mp3`);
+    await execFileAsync(ffmpegPath, [
+      '-i', req.file.path,
+      '-ac', '1',
+      '-ar', '16000',
+      '-acodec', 'libmp3lame',
+      '-y',
+      tempConverted
+    ]);
+
+    const audioBuffer = fs.readFileSync(tempConverted);
+
+    // 1. Transcribir con Groq Whisper Large v3 Turbo inyectando el glosario del curso
+    const transcribedText = await transcribeLiveAudio(
       audioBuffer, 
-      req.file.mimetype || 'audio/webm',
-      'Cátedra universitaria de matemáticas y cálculo: derivadas, integrales, límites, diferenciales dx, funciones, álgebra.'
+      'audio/mp3', 
+      currentCourse.glossary
     );
 
-    // Limpiar archivo temporal de inmediato
+    // Limpiar temporales
     try { fs.unlinkSync(req.file.path); } catch (_) {}
+    try { fs.unlinkSync(tempConverted); tempConverted = null; } catch (_) {}
 
-    liveLectureState.totalChunks++;
-    liveLectureState.isActive = true;
+    const secNum = parseInt(elapsedSeconds, 10) || liveSession.elapsedSeconds || 0;
+    liveSession.elapsedSeconds = secNum + 5;
+    liveSession.isActive = true;
 
-    let newEntry = null;
-    const mins = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
-    const secs = String(elapsedSeconds % 60).padStart(2, '0');
-    const timestamp = `${mins}:${secs}`;
+    const m = Math.floor(secNum / 60);
+    const s = Math.floor(secNum % 60);
+    const timestamp = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 
-    if (text && text.trim()) {
-      newEntry = {
-        id: `live-${Date.now()}-${liveLectureState.entries.length}`,
+    if (!transcribedText || !transcribedText.trim()) {
+      return res.json({
+        success: true,
+        entry: null,
         timestamp,
-        seconds: elapsedSeconds,
-        speaker: 'Profesor / Ayudante (En Vivo)',
-        text: text.trim()
-      };
-      liveLectureState.entries.push(newEntry);
-      console.log(`[Live Mic] 🎙️ [${timestamp}] "${text.trim()}"`);
+        text: '',
+        message: 'Silencio o ruido no vocal filtrado'
+      });
     }
+
+    // 2. Micro-Labeler Semántico: clasifica categoría, LaTeX, orador y capítulo
+    const labeled = await labelAndCleanSegment({
+      text: transcribedText,
+      previousSegments: liveSession.entries,
+      courseName: currentCourse.name
+    });
+
+    const isTeacher = isPrimarySpeaker === 'true' && labeled.speakerRole === 'profesor';
+
+    const newEntry = {
+      id: `VIVO-${liveSession.entries.length + 1}`,
+      timestamp,
+      seconds: secNum,
+      speaker: isTeacher ? currentCourse.instructor : 'Intervención en el Aula',
+      speakerRole: isTeacher ? 'profesor' : 'interrupcion',
+      text: labeled.cleanedText || transcribedText,
+      category: labeled.category, // 'concepto_clave' | 'formula' | 'importancia' | 'digresion'
+      chapterTitle: labeled.chapterTitle,
+      keyTerms: labeled.keyTerms || [],
+      receivedAt: new Date().toISOString()
+    };
+
+    liveSession.entries.push(newEntry);
+
+    // Actualizar capítulos inteligentes si hay un cambio de subtema
+    if (labeled.chapterTitle && labeled.chapterTitle.length > 2) {
+      const lastChapter = liveSession.chapters[liveSession.chapters.length - 1];
+      if (!lastChapter || lastChapter.title.toLowerCase() !== labeled.chapterTitle.toLowerCase()) {
+        liveSession.chapters.push({
+          minute: timestamp,
+          title: labeled.chapterTitle
+        });
+      }
+    }
+
+    const pace = calculatePaceMetrics(liveSession.entries);
+
+    console.log(`[Audio Ingest] [${timestamp}] (${labeled.category}): "${newEntry.text.substring(0, 60)}..."`);
 
     res.json({
       success: true,
-      text: text || '',
-      timestamp,
-      newEntry,
-      totalEntries: liveLectureState.entries.length
+      entry: newEntry,
+      totalEntries: liveSession.entries.length,
+      pace,
+      chapters: liveSession.chapters
     });
+
   } catch (error) {
-    console.error('Error en /api/live-stream/chunk:', error);
+    console.error('Error en /api/live/audio-chunk:', error);
+    if (tempConverted && fs.existsSync(tempConverted)) {
+      try { fs.unlinkSync(tempConverted); } catch (_) {}
+    }
     if (req.file && fs.existsSync(req.file.path)) {
       try { fs.unlinkSync(req.file.path); } catch (_) {}
     }
@@ -189,41 +263,27 @@ app.post('/api/live-stream/chunk', upload.single('audio'), async (req, res) => {
   }
 });
 
-app.get('/api/live-stream/entries', (req, res) => {
-  const fullText = liveLectureState.entries.map(e => `[${e.timestamp}] ${e.text}`).join('\n');
-  res.json({
-    isActive: liveLectureState.isActive,
-    totalEntries: liveLectureState.entries.length,
-    entries: liveLectureState.entries,
-    fullText
-  });
-});
+// --------------------------------------------------------------------------
+// API 3: SIMULACIÓN PASO A PASO (PARA DEMOS DESDE ARCHIVO LOCAL)
+// --------------------------------------------------------------------------
 
-app.post('/api/live-stream/reset', (req, res) => {
-  liveLectureState.entries = [];
-  liveLectureState.totalChunks = 0;
-  liveLectureState.isActive = false;
-  console.log('[Live Mic] 🔄 Sesión de micrófono reiniciada');
-  res.json({ success: true, message: 'Sesión en vivo reiniciada exitosamente' });
-});
-
-/**
- * Endpoint de Simulación: Avanza la clase cortando y transcribiendo N segundos del audio
- * Recibe: { course: 'macro' | 'calculo', startSecond: number, durationSeconds: number }
- */
 app.post('/api/simulator/step-chunk', async (req, res) => {
   let tempOut = null;
   try {
-    const { course = 'macro', startSecond = 0, durationSeconds = 5 } = req.body;
-    const targetFile = course === 'calculo' ? calculusAudioPath : audioPath;
+    const { startSecond = 0, durationSeconds = 5 } = req.body;
+    const currentCourse = getCourse(activeCourseId);
 
-    if (!fs.existsSync(targetFile)) {
-      return res.status(404).json({ error: `Archivo de audio para '${course}' no encontrado en el servidor.` });
+    // Seleccionar archivo según el ramo activo
+    let targetFile = audioMacroPath;
+    if (activeCourseId === 'probabilidades' || activeCourseId === 'finanzas') {
+      targetFile = audioCalculusPath; // fallback con audio matemático claro
     }
 
-    tempOut = path.join(uploadDir, `sim_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`);
-    
-    // Cortar fragmento exacto de audio con ffmpeg
+    if (!fs.existsSync(targetFile)) {
+      return res.status(404).json({ error: 'Archivo de audio base no encontrado' });
+    }
+
+    tempOut = path.join(uploadDir, `sim_${Date.now()}.mp3`);
     await execFileAsync(ffmpegPath, [
       '-ss', String(startSecond),
       '-t', String(durationSeconds),
@@ -236,8 +296,7 @@ app.post('/api/simulator/step-chunk', async (req, res) => {
     const audioBuffer = fs.readFileSync(tempOut);
     try { fs.unlinkSync(tempOut); tempOut = null; } catch (_) {}
 
-    // Transcribir con Groq Whisper (con fallback a Gemini)
-    const text = await transcribeLiveAudioBuffer(audioBuffer, 'audio/mp3');
+    const text = await transcribeLiveAudio(audioBuffer, 'audio/mp3', currentCourse.glossary);
 
     const m = Math.floor(startSecond / 60);
     const s = Math.floor(startSecond % 60);
@@ -245,27 +304,41 @@ app.post('/api/simulator/step-chunk', async (req, res) => {
 
     let newEntry = null;
     if (text && text.trim().length > 0) {
+      const labeled = await labelAndCleanSegment({
+        text,
+        previousSegments: liveSession.entries,
+        courseName: currentCourse.name
+      });
+
       newEntry = {
+        id: `VIVO-${liveSession.entries.length + 1}`,
         timestamp,
-        speaker: course === 'calculo' ? 'Prof. Cálculo' : 'Prof. Macroeconomía',
-        text: text.trim(),
+        seconds: startSecond,
+        speaker: currentCourse.instructor,
+        speakerRole: 'profesor',
+        text: labeled.cleanedText || text,
+        category: labeled.category,
+        chapterTitle: labeled.chapterTitle,
+        keyTerms: labeled.keyTerms || [],
         receivedAt: new Date().toISOString()
       };
-      liveLectureState.entries.push(newEntry);
-      liveLectureState.totalChunks++;
-      liveLectureState.isActive = true;
-      console.log(`[Simulator Chunk] [${timestamp}] (${course}): "${text.trim().substring(0, 70)}..."`);
+
+      liveSession.entries.push(newEntry);
+      liveSession.isActive = true;
+      liveSession.elapsedSeconds = startSecond + durationSeconds;
     }
+
+    const pace = calculatePaceMetrics(liveSession.entries);
 
     res.json({
       success: true,
       timestamp,
-      text: text ? text.trim() : '',
-      newEntry,
-      totalEntries: liveLectureState.entries.length,
+      entry: newEntry,
       nextSeconds: startSecond + durationSeconds,
-      course
+      pace,
+      chapters: liveSession.chapters
     });
+
   } catch (error) {
     console.error('Error en /api/simulator/step-chunk:', error);
     if (tempOut && fs.existsSync(tempOut)) {
@@ -275,156 +348,123 @@ app.post('/api/simulator/step-chunk', async (req, res) => {
   }
 });
 
-/**
- * 3. Chat en Vivo (Lógica pedagógica acotada)
- * Recibe: { question, revealedTranscript, currentTimeFormatted }
- */
+// --------------------------------------------------------------------------
+// API 4: CONTROLES DEL PROFESOR Y ALERTAS "ME PERDÍ"
+// --------------------------------------------------------------------------
+
+app.post('/api/teacher/settings', (req, res) => {
+  const { chatState, allowComplement, hideDigressions } = req.body;
+
+  if (chatState !== undefined) liveSession.teacherSettings.chatState = chatState;
+  if (allowComplement !== undefined) liveSession.teacherSettings.allowComplement = !!allowComplement;
+  if (hideDigressions !== undefined) liveSession.teacherSettings.hideDigressions = !!hideDigressions;
+
+  console.log('[Teacher Controls] Configuración actualizada:', liveSession.teacherSettings);
+  res.json({ success: true, teacherSettings: liveSession.teacherSettings });
+});
+
+app.post('/api/live/lost', (req, res) => {
+  const { timestamp = '00:00' } = req.body;
+  const existing = liveSession.lostAlerts.find(a => a.timestamp === timestamp);
+
+  if (existing) {
+    existing.count = (existing.count || 1) + 1;
+  } else {
+    liveSession.lostAlerts.push({ timestamp, count: 1 });
+  }
+
+  const total = liveSession.lostAlerts.reduce((sum, a) => sum + a.count, 0);
+  console.log(`[Alert] Estudiante marcó "Me perdí" en [${timestamp}] (Total: ${total})`);
+
+  res.json({ success: true, totalLost: total, timestamp });
+});
+
+app.post('/api/teacher/close-class', async (req, res) => {
+  try {
+    const course = getCourse(activeCourseId);
+    console.log(`[Cátedra Viva] Cerrando sesión y generando resumen histórico para ${course.code}...`);
+
+    const summary = await generateClassSummary(course, liveSession.entries);
+    const savedHistorical = recordClosedClass(activeCourseId, {
+      title: summary.title,
+      summary: summary.summary,
+      keyFormulas: summary.keyFormulas
+    });
+
+    // Reiniciar sesión en vivo para la próxima
+    liveSession.entries = [];
+    liveSession.lostAlerts = [];
+    liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+    liveSession.isActive = false;
+    liveSession.elapsedSeconds = 0;
+
+    res.json({
+      success: true,
+      message: 'Clase cerrada exitosamente y archivada en el RAG Histórico.',
+      newHistoricalEntry: savedHistorical,
+      updatedCourse: getCourse(activeCourseId)
+    });
+  } catch (error) {
+    console.error('Error cerrando clase:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/live/reset', (req, res) => {
+  liveSession.entries = [];
+  liveSession.lostAlerts = [];
+  liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+  liveSession.isActive = false;
+  liveSession.elapsedSeconds = 0;
+  console.log('[Cátedra Viva] Transcripción en vivo reiniciada');
+  res.json({ success: true, message: 'Sesión reiniciada con éxito' });
+});
+
+// --------------------------------------------------------------------------
+// API 5: CHATBOT TUTOR PEDAGÓGICO PARA ESTUDIANTES
+// --------------------------------------------------------------------------
+
 app.post('/api/chat', async (req, res) => {
   try {
-    const { question, revealedTranscript, currentTimeFormatted } = req.body;
-    
+    const { question, currentTimeFormatted = '00:00' } = req.body;
+
     if (!question || !question.trim()) {
-      return res.status(400).json({ error: 'La pregunta no puede estar vacía' });
+      return res.status(400).json({ error: 'La pregunta no puede estar vacía.' });
     }
 
-    let effectiveTranscript = revealedTranscript || '';
-    if (liveLectureState.entries.length > 0) {
-      const liveText = liveLectureState.entries.map(e => `[${e.timestamp}] ${e.speaker}: ${e.text}`).join('\n');
-      if (effectiveTranscript.trim()) {
-        effectiveTranscript = `[TRANSCRIPCIÓN EN VIVO DEL MICRÓFONO]:\n${liveText}\n\n[CONTEXTO ADICIONAL]:\n${effectiveTranscript}`;
-      } else {
-        effectiveTranscript = liveText;
-      }
-    }
+    const currentCourse = getCourse(activeCourseId);
 
-    const answer = await answerLiveChat({
+    const response = await answerStudentQuestion({
       question: question.trim(),
-      revealedTranscript: effectiveTranscript,
-      currentTimeFormatted: currentTimeFormatted || '00:00:00'
+      course: currentCourse,
+      liveEntries: liveSession.entries,
+      teacherSettings: liveSession.teacherSettings,
+      currentTimeFormatted
     });
 
-    // Registrar en Analítica de Comprensión (Capa 2: agregada y anónima)
-    analyticsService.recordQuestion({
-      question: question.trim(),
-      answer,
-      currentTimeFormatted: currentTimeFormatted || '00:00:00'
-    });
+    res.json(response);
 
-    res.json({ 
-      answer,
-      timestamp: new Date().toISOString()
-    });
   } catch (error) {
     console.error('Error en /api/chat:', error);
-    res.status(500).json({ 
-      error: 'Error procesando la consulta con el modelo de lenguaje.',
-      details: error.message 
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Cache en memoria para el resumen post-clase
-let cachedSummary = null;
+// --------------------------------------------------------------------------
+// API 6: AGREGAR MATERIAL DE ESTUDIO EN VIVO
+// --------------------------------------------------------------------------
 
-/**
- * 4. Generación de Resumen Post-Clase y Conceptos Clave
- */
-app.post('/api/summary', async (req, res) => {
-  try {
-    const forceRefresh = req.body.forceRefresh === true;
-    if (cachedSummary && !forceRefresh) {
-      return res.json(cachedSummary);
-    }
+app.post('/api/materials/add', (req, res) => {
+  const { title, pages, content } = req.body;
+  if (!content) return res.status(400).json({ error: 'El contenido del material es obligatorio' });
 
-    const summaryData = await generatePostClassSummary(FULL_TRANSCRIPT_TEXT);
-    cachedSummary = summaryData;
-    res.json(summaryData);
-  } catch (error) {
-    console.error('Error en /api/summary:', error);
-    res.status(500).json({ 
-      error: 'Error generando el resumen post-clase.',
-      details: error.message 
-    });
-  }
+  const newMat = addCourseMaterial(activeCourseId, { title, pages, content });
+  res.json({ success: true, material: newMat });
 });
 
-/**
- * 5. Buscador / Q&A Post-Clase sobre transcripción completa
- */
-app.post('/api/post-class-qa', async (req, res) => {
-  try {
-    const { question } = req.body;
-    if (!question || !question.trim()) {
-      return res.status(400).json({ error: 'La pregunta no puede estar vacía' });
-    }
-
-    const answer = await answerPostClassQuery(question.trim(), FULL_TRANSCRIPT_TEXT);
-    res.json({ answer });
-  } catch (error) {
-    console.error('Error en /api/post-class-qa:', error);
-    res.status(500).json({ 
-      error: 'Error procesando la búsqueda post-clase.',
-      details: error.message 
-    });
-  }
-});
-
-/**
- * 6. Datos de Recurrencia Histórica (Ejemplo para demo)
- */
-app.get('/api/recurrence', (req, res) => {
-  res.json({
-    course: "IN4123 - Macroeconomía",
-    module: "Unidad 2: Equilibrio en Mercados Financieros y Reales",
-    historicalClasses: [
-      {
-        id: "class-1",
-        date: "20 de Septiembre de 2026",
-        title: "Sesión 11: Mercados de Dinero y Tasa de Interés",
-        professor: "Prof. Roberto Celis",
-        status: "Finalizada",
-        summary: "En esta sesión se introdujeron los fundamentos del mercado financiero y monetario: la distinción entre ahorro (S) e inversión (I), la demanda de dinero determinada por el ingreso, y la oferta de dinero fijada por el Banco Central. Se derivó analíticamente la curva LM como la condición de equilibrio monetario L = M, dejando planteada la incógnita de cómo interacciona con el mercado de bienes.",
-        keyConcepts: ["Preferencia por la liquidez", "Oferta monetaria del Banco Central", "Tasa de interés de equilibrio"],
-        studentDoubtAreas: "45% de consultas sobre la diferencia entre ahorro bancario e inversión real."
-      },
-      {
-        id: "class-2",
-        date: "27 de Septiembre de 2026 (Clase Actual)",
-        title: "Sesión 12: Integración del Modelo IS-LM y Políticas Macroeconómicas",
-        professor: "Prof. Roberto Celis",
-        status: "En curso / Transcrita",
-        summary: "Tomando como base lo discutido en la clase anterior del 20 de septiembre (donde se abordó de forma aislada el mercado de dinero y la preferencia por la liquidez), en esta sesión el profesor integró formalmente la curva IS con la curva LM en un solo gráfico. Se determinó el equilibrio simultáneo (i*, Y*) y se mostraron los canales de transmisión de las políticas fiscales del gobierno (gasto e impuestos) y las políticas monetarias del Banco Central (tasa, encaje y mercado abierto).",
-        hasContinuityBadge: true,
-        continuityNote: "Este resumen incorpora automáticamente la memoria semántica de la Sesión 11 para contextualizar la transición pedagógica.",
-        keyConcepts: ["Curva IS (bienes)", "Curva LM (dinero)", "Equilibrio conjunto IS-LM", "Política fiscal vs. monetaria"]
-      }
-    ]
-  });
-});
-
-/**
- * 7. Datos del Dashboard del Profesor (Estadísticas agregadas y anónimas en tiempo real)
- */
-app.get('/api/stats', (req, res) => {
-  res.json(analyticsService.getAggregatedStats());
-});
-
-app.post('/api/stats/reset', (req, res) => {
-  analyticsService.reset();
-  res.json({ success: true, message: 'Estadísticas de la sesión reiniciadas' });
-});
-
-// Fallback para servir la SPA en cualquier ruta no reconocida de la API
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`=======================================================`);
-  console.log(`🚀 Cátedra Viva - Aula Aumentada con IA`);
-  console.log(`📡 Servidor escuchando en: http://0.0.0.0:${PORT}`);
-  const provider = process.env.GROQ_API_KEY ? 'Groq (Primario) con Fallback a Gemini' : (process.env.GEMINI_API_KEY ? 'Google Gemini' : 'Ninguno');
-  console.log(`🔑 LLM Provider: ${provider} (Protegido en servidor)`);
-  console.log(`📚 Curso: ${COURSE_CONFIG.courseCode} - ${COURSE_CONFIG.courseName}`);
+  console.log(`🏛️ Cátedra Viva V2 (Clean-Slate) activa en http://localhost:${PORT}`);
+  console.log(`📚 Ramo inicial: ${activeCourseId.toUpperCase()}`);
   console.log(`=======================================================`);
 });

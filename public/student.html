@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es-CL">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Cátedra Viva — Estudiante en el Aula</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <style>
+    /* Pestañas para teléfonos móviles */
+    .mobile-tab-bar {
+      display: none;
+      border-bottom: 1px solid var(--surface-border);
+      background: var(--surface);
+    }
+    @media (max-width: 900px) {
+      .mobile-tab-bar { display: flex; }
+      .col-panel.is-hidden-mobile { display: none !important; }
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 0.75rem 0.5rem;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+    }
+    .tab-btn.active {
+      color: var(--text);
+      border-bottom-color: var(--primary);
+    }
+    .floating-lost-btn {
+      position: sticky;
+      bottom: 0.75rem;
+      margin: 0.5rem auto 0 auto;
+      display: flex;
+      box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand-wrap">
+      <span class="brand-icon">🎓</span>
+      <div>
+        <div class="brand-title" id="studentCourseTitle">Cargando aula...</div>
+        <div class="brand-subtitle" id="studentCourseCode">Aula Aumentada en Vivo</div>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <div class="conn-pill" id="liveConnBadge">
+        <span class="dot-pulse"></span>
+        <span id="liveConnText">Conectado a la clase</span>
+      </div>
+      <div style="display: flex; gap: 0.2rem;">
+        <button id="btnFontDown" class="btn-font-control" title="Achicar texto">A−</button>
+        <button id="btnFontUp" class="btn-font-control" title="Agrandar texto">A+</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Pestañas para Pantallas Móviles -->
+  <div class="mobile-tab-bar">
+    <button id="tabBtnTranscript" class="tab-btn active">📝 Subtítulos en Vivo</button>
+    <button id="tabBtnChat" class="tab-btn">💬 Tutor Socrático</button>
+  </div>
+
+  <main class="classroom-grid">
+
+    <!-- COLUMNA 1: TRANSCRIPCIÓN EN VIVO CON CITAS Y BOTÓN "ME PERDÍ" -->
+    <section id="panelTranscript" class="card col-panel" style="display: flex; flex-direction: column;">
+      
+      <!-- Puente: La Clase Anterior -->
+      <details id="bridgeDetails" class="bridge-box">
+        <summary id="bridgeSummaryText">📚 Puente: Resumen de la Clase Anterior</summary>
+        <div id="bridgeBody" style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;"></div>
+      </details>
+
+      <div class="card-header">
+        <div>
+          <span class="card-title">📝 Lo que va diciendo el profesor</span>
+          <span style="font-size: 0.72rem; color: var(--text-dim);">Whisper Large v3 Turbo</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.45rem;">
+          <label style="font-size: 0.75rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.3rem;">
+            <input type="checkbox" id="checkFilterDigressions" checked>
+            <span>Ocultar digresiones</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="studentFeed" class="feed-box" style="flex: 1; max-height: 520px;">
+        <div id="studentEmptyState" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
+          <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🎙️</div>
+          <strong>Esperando al profesor</strong>
+          <p style="font-size: 0.85rem; margin-top: 0.25rem;">
+            Los subtítulos y conceptos aparecerán aquí en segundos tan pronto el profesor empiece a hablar.
+          </p>
+        </div>
+      </div>
+
+      <!-- Botón Flotante de Aviso Rápido: "Me Perdí" -->
+      <button id="btnLostSignal" class="btn btn-lost floating-lost-btn">
+        ⚡ Me perdí en este minuto (Avisar al profesor)
+      </button>
+    </section>
+
+
+    <!-- COLUMNA 2: TUTOR SOCRÁTICO CON CITAS TOCABLES Y MODO PIZARRA -->
+    <section id="panelChat" class="card col-panel is-hidden-mobile" style="display: flex; flex-direction: column;">
+      
+      <div class="card-header">
+        <span class="card-title">💬 Tutor Socrático con Fuentes</span>
+        <span style="font-size: 0.72rem; color: #6EE7B7; background: rgba(16, 185, 129, 0.15); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600;">
+          Respuestas Verificables
+        </span>
+      </div>
+
+      <!-- Banner de Modo Pizarra (si el profesor lo activa) -->
+      <div id="whiteboardBanner" class="whiteboard-banner" style="display: none;">
+        <span style="font-size: 1.3rem;">👀</span>
+        <div>
+          <strong>Modo Pizarra Activo</strong>
+          <div style="font-size: 0.78rem;">El profesor está explicando un punto clave. Presta atención (el chat se reactivará en breve).</div>
+        </div>
+      </div>
+
+      <!-- Preguntas de Prueba Rápida -->
+      <div style="margin-bottom: 0.5rem;">
+        <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+          Consultas rápidas del ramo:
+        </span>
+        <div id="quickPromptChips" class="chips-wrap"></div>
+      </div>
+
+      <!-- Historial de Chat -->
+      <div id="chatMessages" class="chat-messages">
+        <div class="msg-row msg-assistant">
+          <div class="msg-meta">
+            <span style="font-weight: 700; color: #C4B5FD;">TUTOR PEDAGÓGICO</span>
+            <span>• En línea</span>
+          </div>
+          <div>
+            ¡Hola! Estoy siguiendo la clase en tiempo real. Puedes preguntarme cualquier duda conceptual o procedimental sobre lo que diga el profesor o el material del curso.
+            <br><br>
+            <em>Tip: Cada respuesta citará el minuto exacto de la clase o la guía correspondiente. Toca la cita para ver la fuente.</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario de Preguntas -->
+      <form id="studentChatForm" class="chat-form">
+        <input 
+          id="studentChatInput" 
+          type="text" 
+          class="chat-input" 
+          placeholder="Haz una pregunta sobre la clase o un ejercicio... (Enter para enviar)"
+          autocomplete="off">
+        <button id="btnSendChat" type="submit" class="btn btn-primary" style="padding: 0 1.25rem;">
+          Preguntar ➔
+        </button>
+      </form>
+    </section>
+
+  </main>
+
+  <script type="module" src="/js/student.js"></script>
+</body>
+</html>
