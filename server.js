@@ -77,7 +77,16 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Evitar caché de JS/HTML en celulares y laptops durante pruebas y presentación
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html') || req.path === '/profesor' || req.path === '/estudiante') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModified: false }));
 
 // Archivos de audio pregrabados para simulaciones
 const audioMacroPath = path.join(__dirname, 'Modelo IS-LM - Explicado para principiantes!.mp3');

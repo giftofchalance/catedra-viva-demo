@@ -91,7 +91,7 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
         formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${ext}`);
         formData.append('model', modelName);
         formData.append('language', 'es');
-        formData.append('response_format', 'verbose_json');
+        formData.append('response_format', 'json');
         formData.append('temperature', '0');
 
         const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
@@ -107,22 +107,6 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
 
         if (res.ok) {
           const data = await res.json();
-
-          // Solo descartar segmentos si simultáneamente tienen altísima probabilidad de silencio (>0.85) y muy baja confianza (<-1.0)
-          if (Array.isArray(data.segments) && data.segments.length > 0) {
-            const validSegments = data.segments.filter(seg => {
-              const noSpeech = typeof seg.no_speech_prob === 'number' ? seg.no_speech_prob : 0;
-              const avgLogProb = typeof seg.avg_logprob === 'number' ? seg.avg_logprob : 0;
-              const compRatio = typeof seg.compression_ratio === 'number' ? seg.compression_ratio : 1;
-              if (noSpeech > 0.85 && avgLogProb < -0.95) return false;
-              if (compRatio > 2.6) return false;
-              return true;
-            });
-
-            const joinedText = validSegments.map(s => s.text || '').join(' ').trim();
-            return cleanWhisperOutput(joinedText);
-          }
-
           return cleanWhisperOutput(data.text);
         }
       } catch (err) {
@@ -261,6 +245,9 @@ function normalizeSpokenTerms(text) {
     .replace(/\bis lm\b/gi, 'IS-LM')
     .replace(/\bKPM\b/g, 'CAPM')
     .replace(/\bkpm\b/gi, 'CAPM')
+    .replace(/\bCAPE\b/g, 'CAPM')
+    .replace(/\bel cape\b/gi, 'el CAPM')
+    .replace(/\bbajo el cape\b/gi, 'bajo el CAPM')
     .replace(/\bC\.?A\.?P\.?M\.?\b/gi, 'CAPM');
 }
 

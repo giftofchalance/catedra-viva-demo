@@ -314,9 +314,16 @@ async function startRecording() {
       micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }, 1000);
 
-    // Iniciar grabación continua en bloques de 6s con traslape de 350ms (0 pérdida entre bloques y funciona en 2do plano)
-    recordOverlappedChunk();
-    chunkCycleInterval = setInterval(recordOverlappedChunk, 6000);
+    // Iniciar primer bloque de inmediato (0s) y rotar cada 5.0s sin ningún hueco ni descarte en cliente
+    startSingleRecorderChunk();
+    chunkCycleInterval = setInterval(() => {
+      if (!isRecording || !mediaStream) return;
+      // Detener el grabador actual e iniciar el siguiente en la misma línea (0ms de hueco, 1 solo MediaRecorder activo)
+      if (activeRecorder && activeRecorder.state === 'recording') {
+        try { activeRecorder.stop(); } catch (_) {}
+      }
+      startSingleRecorderChunk();
+    }, 5000);
 
   } catch (err) {
     micStatusText.textContent = 'Micrófono en espera';
@@ -374,12 +381,11 @@ function getBestAudioMimeType() {
 }
 
 /**
- * Grabación continua con traslape de 350ms:
- * - Cada 6.0 segundos arranca un nuevo MediaRecorder, y el anterior se detiene a los 6.35 segundos.
- * - Así NUNCA se corta una palabra en el borde entre dos chunks.
- * - NO depende de requestAnimationFrame, por lo que sigue grabando al 100% aunque cambies de pestaña o ventana para leer tus apuntes.
+ * Grabador limpio estilo V1/2033d10 (1 sola instancia activa, 0ms de hueco, 0 descartes en cliente):
+ * - Captura desde el segundo 00:00 ("Buenos días, chiquillos...") sin perder el inicio.
+ * - Cada vez que chunkCycleInterval corta a los 5.0s, onstop empaqueta el audio y lo encola en orden al servidor.
  */
-function recordOverlappedChunk() {
+function startSingleRecorderChunk() {
   if (!isRecording || !mediaStream) return;
 
   const mime = getBestAudioMimeType();
@@ -396,7 +402,7 @@ function recordOverlappedChunk() {
   rec.onstop = () => {
     if (chunks.length === 0) return;
     const blob = new Blob(chunks, { type: mime || 'audio/webm' });
-    if (blob.size < 800) return;
+    if (blob.size < 500) return;
 
     // Encolar secuencialmente para garantizar que ningún bloque se pierda ni se desordene
     uploadQueue = uploadQueue
@@ -404,14 +410,7 @@ function recordOverlappedChunk() {
       .catch(err => console.warn('Error en cola de audio:', err));
   };
 
-  rec.start();
-
-  // Grabar 6.35s mientras el siguiente ciclo inicia a los 6.0s (350ms de traslape acústico para no cortar sílabas)
-  setTimeout(() => {
-    if (rec.state === 'recording') {
-      try { rec.stop(); } catch (_) {}
-    }
-  }, 6350);
+  rec.start(250); // timeslice de 250ms para capturar desde el primer milisegundo ("Buenos días...")
 }
 
 async function sendChunkToServer(audioBlob, currentSeconds) {
