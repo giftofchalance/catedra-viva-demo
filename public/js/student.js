@@ -3,7 +3,7 @@
  */
 
 let currentCourse = null;
-let currentSettings = { chatState: 'active', allowComplement: true, hideDigressions: true };
+let currentSettings = { chatState: 'active', allowComplement: true, hideDigressions: false };
 let currentEntries = [];
 let fontScale = 1;
 
@@ -269,9 +269,14 @@ async function handleChatSubmit(e) {
     loadingBubble.remove();
 
     if (data.status === 'paused') {
-      appendAssistantMessage(data.answer, null, true);
+      appendAssistantMessage(data.answer, null, { isPaused: true });
     } else if (res.ok) {
-      appendAssistantMessage(data.answer, data.complement);
+      appendAssistantMessage(data.answer, data.complement, {
+        questionType: data.questionType,
+        canForwardToTeacher: data.canForwardToTeacher,
+        originalQuestion: q,
+        currentTime
+      });
     } else {
       appendAssistantMessage(`⚠️ Error: ${data.error || 'No se pudo obtener respuesta.'}`);
     }
@@ -306,15 +311,28 @@ function appendAssistantLoading() {
   return row;
 }
 
-function appendAssistantMessage(answerText, complementText = null, isPaused = false) {
+function appendAssistantMessage(answerText, complementText = null, options = {}) {
+  const {
+    isPaused = false,
+    questionType = 'grounded',
+    canForwardToTeacher = false,
+    originalQuestion = '',
+    currentTime = '00:00'
+  } = options;
+
   const row = document.createElement('div');
   row.className = 'msg-row msg-assistant';
+
+  if (questionType === 'off_topic') {
+    row.style.borderLeft = '3px solid #EF4444';
+    row.style.background = 'rgba(239, 68, 68, 0.08)';
+  }
 
   // Transformar citas [VIVO-X], [HIST-X], [MAT-X] en chips clicables
   const formattedHtml = formatAnswerWithCitations(answerText);
 
   let complementHtml = '';
-  if (complementText) {
+  if (complementText && questionType !== 'off_topic') {
     complementHtml = `
       <div class="complement-box">
         <div class="complement-header">
@@ -328,10 +346,24 @@ function appendAssistantMessage(answerText, complementText = null, isPaused = fa
     `;
   }
 
+  let forwardButtonHtml = '';
+  if (canForwardToTeacher && questionType === 'unseen_academic') {
+    forwardButtonHtml = `
+      <div style="margin-top: 0.65rem;">
+        <button type="button" class="btn btn-outline btn-forward-teacher" style="font-size: 0.78rem; padding: 0.35rem 0.7rem; border-color: rgba(245, 158, 11, 0.5); color: #FCD34D;">
+          🙋‍♂️ Enviar esta duda al profesor (Anónimo)
+        </button>
+      </div>
+    `;
+  }
+
+  const headerColor = isPaused ? '#FCD34D' : (questionType === 'off_topic' ? '#F87171' : '#6EE7B7');
+  const headerTitle = isPaused ? 'MODO PIZARRA' : (questionType === 'off_topic' ? 'FILTRO ACADÉMICO DEL AULA' : 'TUTOR PEDAGÓGICO');
+
   row.innerHTML = `
     <div class="msg-meta">
-      <span style="font-weight: 700; color: ${isPaused ? '#FCD34D' : '#6EE7B7'};">
-        ${isPaused ? 'MODO PIZARRA' : 'TUTOR PEDAGÓGICO'}
+      <span style="font-weight: 700; color: ${headerColor};">
+        ${headerTitle}
       </span>
       <span>• ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
     </div>
@@ -339,7 +371,24 @@ function appendAssistantMessage(answerText, complementText = null, isPaused = fa
       ${formattedHtml}
     </div>
     ${complementHtml}
+    ${forwardButtonHtml}
   `;
+
+  // Enlazar botón de enviar duda al profesor si aplica
+  const forwardBtn = row.querySelector('.btn-forward-teacher');
+  if (forwardBtn) {
+    forwardBtn.addEventListener('click', async () => {
+      forwardBtn.disabled = true;
+      forwardBtn.textContent = '✓ Duda enviada a la pantalla del profesor';
+      try {
+        await fetch('/api/live/forward-question', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: originalQuestion, timestamp: currentTime })
+        });
+      } catch (_) {}
+    });
+  }
 
   // Enlazar clics de citas tocables
   row.querySelectorAll('.cite-chip').forEach(btn => {

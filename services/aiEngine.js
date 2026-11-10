@@ -1,10 +1,13 @@
 /**
- * Motor de IA Unificado (Groq Whisper v3 Turbo + Qwen 27B / GPT-OSS 120B + Gemini 3.8 Flash)
- * Provee:
- * 1. Transcripción robusta con inyección de glosario dinámico del curso.
- * 2. Micro-labeler semántico en tiempo real (roles, categorías, LaTeX y capítulos Read.ai).
- * 3. Métricas de oratoria (WPM, ritmo, capítulos).
- * 4. Chatbot socrático con citas interactivas y control maestro docente (Modo Pizarra).
+ * Motor de IA Unificado (Cátedra Viva V2)
+ * 
+ * SEPARACIÓN ESTRICTA DE CUOTAS (0 CRUCE ENTRE COMPONENTES):
+ * - Bucket 1 (Audio STT Primario):   Groq `whisper-large-v3-turbo` (20 RPM exclusivos)
+ * - Bucket 2 (Audio STT Respaldo):   Groq `whisper-large-v3` (20 RPM exclusivos)
+ * - Bucket 3 (Micro-Labeler Texto):  Groq `openai/gpt-oss-20b` (30 RPM exclusivos para etiquetado)
+ * - Bucket 4 (Chatbot Tutor #1):     Groq `qwen/qwen3.8-27b` (30 RPM exclusivos para preguntas de alumnos)
+ * - Bucket 5 (Chatbot Tutor #2):     Groq `openai/gpt-oss-120b` (30 RPM exclusivos de respaldo para alumnos)
+ * - Bucket 6 (Respaldo Externo):     Google `gemini-3.8-flash` (15 RPM en Google AI Studio)
  */
 
 import 'dotenv/config';
@@ -12,100 +15,127 @@ import 'dotenv/config';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 
+// Lista de alucinaciones típicas de Whisper cuando recibe silencio o respiración
+const WHISPER_SILENCE_HALLUCINATIONS = new Set([
+  'gracias', 'gracias.', 'muchas gracias', 'muchas gracias.',
+  'bien', 'bien.', 'bueno', 'bueno.', 'sí', 'sí.', 'no', 'no.',
+  'y', 'y.', 'o', 'eh', 'ah', 'mm', 'amén', 'amén.', 'subtítulos',
+  'hola', 'hola.', 'adiós', 'hasta luego', '...', '.'
+]);
+
 /**
- * 1. Transcripción de Audio en Vivo con Whisper Large v3 Turbo en Groq
+ * Filtra alucinaciones de silencio de Whisper
  */
-export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', glossaryPrompt = '') {
+function cleanWhisperOutput(rawText) {
+  if (!rawText) return '';
+  let text = rawText.replace(/^["'«“]|["'»”]$/g, '').trim();
+  const low = text.toLowerCase();
+
+  // Frases típicas de YouTube / Amara inyectadas por Whisper en silencios
+  if (
+    low.includes('subtítulos por') ||
+    low.includes('subtitulado por') ||
+    low.includes('amara.org') ||
+    low.includes('gracias por ver') ||
+    low.includes('suscríbete') ||
+    low.includes('suscrib') ||
+    low.includes('dale like') ||
+    (low.includes('hasta la próxima') && text.length < 35)
+  ) {
+    return '';
+  }
+
+  // Palabras sueltas aisladas que Whisper inventa ante ruido blanco de micrófono
+  const cleanPunct = low.replace(/[.,¡!¿?…]/g, '').trim();
+  if (WHISPER_SILENCE_HALLUCINATIONS.has(low) || WHISPER_SILENCE_HALLUCINATIONS.has(cleanPunct)) {
+    return '';
+  }
+
+  // Si tiene menos de 4 caracteres alfabéticos, descartar por ser ruido
+  if (cleanPunct.length < 4) {
+    return '';
+  }
+
+  return text;
+}
+
+/**
+ * 1. Transcripción de Audio en Vivo (Buckets 1 y 2: whisper-large-v3-turbo -> whisper-large-v3)
+ */
+export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', glossaryPrompt = '', recentTextContext = '') {
   if (!GROQ_API_KEY && !GEMINI_API_KEY) {
     throw new Error('No hay claves de API configuradas para transcripción.');
   }
 
-  // 1. Intentar con Groq Whisper Large v3 Turbo
   if (GROQ_API_KEY) {
-    try {
-      const ext = mimeType.includes('mp3') || mimeType.includes('mpeg') ? 'mp3'
-        : mimeType.includes('ogg') ? 'ogg'
-        : mimeType.includes('wav') ? 'wav'
-        : 'webm';
+    const ext = mimeType.includes('mp3') || mimeType.includes('mpeg') ? 'mp3'
+      : mimeType.includes('ogg') ? 'ogg'
+      : mimeType.includes('wav') ? 'wav'
+      : 'webm';
 
-      const formData = new FormData();
-      formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${ext}`);
-      formData.append('model', 'whisper-large-v3-turbo');
-      formData.append('language', 'es');
-      formData.append('response_format', 'json');
-      
-      const defaultVocab = 'Cátedra Viva, clase universitaria, fórmulas, conceptos.';
-      formData.append('prompt', glossaryPrompt ? `${defaultVocab} Términos del ramo: ${glossaryPrompt}` : defaultVocab);
+    // El prompt de Whisper guía la ortografía de siglas (IS-LM, FRAs, Bayes) y continúa la oración anterior
+    const promptParts = ['Clase universitaria en español.'];
+    if (glossaryPrompt) promptParts.push(`Glosario técnico: ${glossaryPrompt}.`);
+    if (recentTextContext) promptParts.push(`Contexto inmediato anterior: "${recentTextContext.slice(-160)}"`);
+    const finalWhisperPrompt = promptParts.join(' ').slice(0, 800);
 
-      let res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
-        body: formData
-      });
+    const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
 
-      if (res.status === 429) {
-        // Pausa breve por rate-limit y 1 reintento
-        await new Promise(r => setTimeout(r, 1500));
-        res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+    for (const modelName of whisperModels) {
+      try {
+        const formData = new FormData();
+        formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${ext}`);
+        formData.append('model', modelName);
+        formData.append('language', 'es');
+        formData.append('response_format', 'json');
+        formData.append('temperature', '0');
+        formData.append('prompt', finalWhisperPrompt);
+
+        const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
           body: formData
         });
-      }
 
-      if (res.ok) {
-        const data = await res.json();
-        let text = data.text?.trim() || '';
-        if (text) {
-          text = text.replace(/^["'«“]|["'»”]$/g, '').trim();
-          const low = text.toLowerCase();
-          // Filtrar alucinaciones comunes de silencio en Whisper
-          if (
-            low.includes('subtítulos por') || 
-            low.includes('amara.org') || 
-            low.includes('gracias por ver') || 
-            low.includes('suscríbete') ||
-            low.includes('suscri') ||
-            low.includes('hasta la próxima') && text.length < 30
-          ) {
-            return '';
-          }
-          return text;
+        if (res.status === 429) {
+          console.warn(`[transcribeLiveAudio] Cuota alcanzada en ${modelName}, rotando al siguiente modelo...`);
+          continue;
         }
+
+        if (res.ok) {
+          const data = await res.json();
+          return cleanWhisperOutput(data.text);
+        }
+      } catch (err) {
+        console.warn(`[transcribeLiveAudio] Error en ${modelName}:`, err.message);
       }
-    } catch (err) {
-      console.warn('[transcribeLiveAudio] Fallo con Groq Whisper:', err.message);
     }
   }
 
-  // 2. Fallback a Gemini si Groq no responde
+  // Fallback externo a Gemini 3.8 Flash
   if (GEMINI_API_KEY) {
     try {
       const base64Audio = audioBuffer.toString('base64');
-      const prompt = `Transcribe exactamente lo que se habla en este fragmento de clase en español. Si solo hay silencio o ruido, responde únicamente: SILENCIO. Glosario: ${glossaryPrompt}`;
-      const body = {
-        contents: [
-          {
+      const prompt = `Transcribe exactamente lo que dice el profesor en este fragmento de clase en español. Si solo hay silencio, respiración o ruido de fondo, responde únicamente la palabra: SILENCIO. Glosario: ${glossaryPrompt}`;
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
             parts: [
               { text: prompt },
               { inline_data: { mime_type: mimeType, data: base64Audio } }
             ]
-          }
-        ],
-        generationConfig: { temperature: 0.1 }
-      };
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+          }],
+          generationConfig: { temperature: 0.1 }
+        })
       });
 
       if (res.ok) {
         const data = await res.json();
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
         if (text && !text.toUpperCase().includes('SILENCIO')) {
-          return text;
+          return cleanWhisperOutput(text);
         }
       }
     } catch (e) {
@@ -117,7 +147,8 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', g
 }
 
 /**
- * 2. Micro-Labeler Semántico: Clasifica roles, categorías pedagógicas, notación LaTeX y capítulos
+ * 2. Micro-Labeler Semántico (Bucket 3 Exclusivo: openai/gpt-oss-20b + Heurística Instantánea)
+ * NUNCA toca la cuota de `qwen/qwen3.8-27b` ni de `openai/gpt-oss-120b` que son exclusivos del Chatbot.
  */
 export async function labelAndCleanSegment({ text, previousSegments = [], courseName = 'Clase' }) {
   if (!text || !text.trim()) {
@@ -125,97 +156,100 @@ export async function labelAndCleanSegment({ text, previousSegments = [], course
       speakerRole: 'profesor',
       category: 'concepto_clave',
       cleanedText: '',
-      chapterTitle: 'Introducción',
+      chapterTitle: null,
       keyTerms: []
     };
   }
 
-  // Heurística de respaldo inicial
   const fallback = {
     speakerRole: 'profesor',
     category: detectHeuristicCategory(text),
-    cleanedText: text.trim(),
-    chapterTitle: courseName,
+    cleanedText: normalizeSpokenTerms(text.trim()),
+    chapterTitle: null,
     keyTerms: []
   };
 
-  if (!GROQ_API_KEY && !GEMINI_API_KEY) {
+  if (!GROQ_API_KEY) {
     return fallback;
   }
 
-  const prevContext = previousSegments.slice(-2).map(s => `[${s.timestamp}] ${s.speaker}: ${s.text}`).join('\n');
+  const prevContext = previousSegments.slice(-2).map(s => `[${s.timestamp}] ${s.text}`).join('\n');
 
-  const systemInstruction = `Eres el clasificador semántico en tiempo real de Cátedra Viva para el curso universitario "${courseName}".
-Tu tarea es analizar el último fragmento hablado por el profesor o aula y clasificarlo con precisión.
-
-DEBES responder ÚNICAMENTE un objeto JSON válido con este esquema:
+  const systemInstruction = `Eres el analizador semántico en tiempo real de una clase universitaria ("${courseName}").
+Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
 {
   "speakerRole": "profesor" | "interrupcion",
   "category": "concepto_clave" | "formula" | "importancia" | "digresion",
-  "cleanedText": "Texto corregido, manteniendo fidelidad al habla pero formateando fórmulas matemáticas en LaTeX con $...$ o $$...$$",
-  "chapterTitle": "Título breve del tema o subtema que se está explicando (máximo 4 palabras)",
-  "keyTerms": ["término1", "término2"]
+  "cleanedText": "Texto con ortografía técnica corregida (ej. IS-LM, FRAs, Bayes) y ecuaciones en $LaTeX$",
+  "chapterTitle": "Título corto de 2 a 4 palabras del tema académico, o null si es solo continuación",
+  "keyTerms": ["termino1"]
 }
 
-Criterios de Categoría:
-- "concepto_clave": Definiciones teóricas, conceptos del ramo, explicaciones pedagógicas de fondo.
-- "formula": Ecuaciones, derivaciones, propiedades matemáticas o cálculos algebraicos.
-- "importancia": Frases de énfasis docente ("ojo con esto", "pregunta de examen", "esto es fundamental").
-- "digresion": Anécdotas personales, chistes, avisos de recreo, comentarios del clima o fútbol, desvaríos fuera de la materia.`;
+REGLAS CRÍTICAS DE CLASIFICACIÓN:
+1. "concepto_clave": Cualquier explicación académica, presentación del tema, introducción de modelos (incluso de otros ramos como IS-LM, finanzas, probabilidades o cálculo), definiciones o desarrollo de la clase. ¡Por defecto usa "concepto_clave"!
+2. "formula": Cuando mencione ecuaciones, variables matemáticas, derivadas, probabilidades o cálculos.
+3. "importancia": Avisos docentes relevantes, énfasis ("ojo con esto", "importante", "entra en la prueba") o presentación inicial del profesor ("Soy el profesor...").
+4. "digresion": ÚSALO SOLAMENTE si hablan de fútbol, chistes, clima, comida o temas 100% no académicos. NUNCA etiquetes un concepto universitario como digresión.`;
 
-  const userPrompt = `Contexto previo reciente de la clase:\n${prevContext || '(Inicio de clase)'}\n\nNueva frase recién capturada:\n"${text}"\n\nResponde únicamente el JSON:`;
+  const userPrompt = `Frases previas:\n${prevContext || '(Inicio de la sesión)'}\n\nFrase actual:\n"${text}"`;
 
   try {
-    if (GROQ_API_KEY) {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'qwen/qwen3.8-27b',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt }
-          ],
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-          max_tokens: 300
-        })
-      });
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${GROQ_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [
+          { role: 'system', content: systemInstruction },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 450
+      })
+    });
 
-      if (res.ok) {
-        const data = await res.json();
-        const rawJson = data.choices?.[0]?.message?.content?.trim();
-        if (rawJson) {
-          const parsed = JSON.parse(rawJson);
-          return {
-            speakerRole: parsed.speakerRole || 'profesor',
-            category: parsed.category || fallback.category,
-            cleanedText: parsed.cleanedText || text.trim(),
-            chapterTitle: parsed.chapterTitle || fallback.chapterTitle,
-            keyTerms: Array.isArray(parsed.keyTerms) ? parsed.keyTerms : []
-          };
-        }
+    if (res.ok) {
+      const data = await res.json();
+      const rawJson = data.choices?.[0]?.message?.content?.trim();
+      if (rawJson) {
+        const parsed = JSON.parse(rawJson);
+        return {
+          speakerRole: parsed.speakerRole === 'interrupcion' ? 'interrupcion' : 'profesor',
+          category: ['concepto_clave', 'formula', 'importancia', 'digresion'].includes(parsed.category)
+            ? parsed.category
+            : fallback.category,
+          cleanedText: parsed.cleanedText || fallback.cleanedText,
+          chapterTitle: parsed.chapterTitle || null,
+          keyTerms: Array.isArray(parsed.keyTerms) ? parsed.keyTerms : []
+        };
       }
     }
   } catch (err) {
-    console.warn('[labelAndCleanSegment] Error con Qwen, usando heurística:', err.message);
+    console.warn('[labelAndCleanSegment] Usando heurística rápida:', err.message);
   }
 
   return fallback;
 }
 
+function normalizeSpokenTerms(text) {
+  return text
+    .replace(/\bISLM\b/gi, 'IS-LM')
+    .replace(/\bis lm\b/gi, 'IS-LM');
+}
+
 function detectHeuristicCategory(text) {
   const low = text.toLowerCase();
-  if (low.includes('=') || low.includes('suma') || low.includes('dividido') || low.includes('integral') || low.includes('derivada') || low.includes('al cuadrado')) {
+  if (low.includes('=') || low.includes('suma') || low.includes('dividido') || low.includes('integral') || low.includes('derivada') || low.includes('al cuadrado') || low.includes('probabilidad de')) {
     return 'formula';
   }
-  if (low.includes('ojo') || low.includes('importante') || low.includes('prueba') || low.includes('examen') || low.includes('recuerden')) {
+  if (low.includes('ojo') || low.includes('importante') || low.includes('prueba') || low.includes('examen') || low.includes('soy el profesor') || low.includes('bienvenidos')) {
     return 'importancia';
   }
-  if (low.includes('el otro día') || low.includes('fútbol') || low.includes('partido') || low.includes('almorzar') || low.includes('chiste')) {
+  if (low.includes('fútbol') || low.includes('mundial') || low.includes('almorzar') || low.includes('chiste') || low.includes('película')) {
     return 'digresion';
   }
   return 'concepto_clave';
@@ -241,16 +275,14 @@ export function calculatePaceMetrics(entries = []) {
     totalWords += words;
   });
 
-  // Calcular WPM sobre los últimos 60 segundos
   const lastEntries = entries.slice(-6);
   let recentWords = 0;
   lastEntries.forEach(e => {
     const w = (e.text || '').trim().split(/\s+/).filter(Boolean).length;
     recentWords += w;
   });
-  
-  // Estimando intervalo reciente (~30 segundos si hay 6 chunks de 5s)
-  const recentMinutes = Math.max(0.5, (lastEntries.length * 5) / 60);
+
+  const recentMinutes = Math.max(0.25, (lastEntries.length * 4.5) / 60);
   const currentWpm = Math.round(recentWords / recentMinutes);
 
   let paceStatus = 'optimo';
@@ -259,7 +291,7 @@ export function calculatePaceMetrics(entries = []) {
   if (currentWpm > 165) {
     paceStatus = 'rapido';
     paceLabel = `${currentWpm} PPM (Hablando Rápido ⚠️)`;
-  } else if (currentWpm < 90 && currentWpm > 0) {
+  } else if (currentWpm < 95 && currentWpm > 0) {
     paceStatus = 'pausado';
     paceLabel = `${currentWpm} PPM (Pausado / Explicativo)`;
   }
@@ -273,28 +305,38 @@ export function calculatePaceMetrics(entries = []) {
 }
 
 /**
- * 4. Tutor Pedagógico con Citas Interactivas, Escalera Socrática y Modo Pizarra
+ * 4. Tutor Pedagógico (Buckets 4, 5 y 6 Exclusivos: qwen/qwen3.8-27b -> openai/gpt-oss-120b -> gemini-3.8-flash)
  */
 export async function answerStudentQuestion({
   question,
   course,
   liveEntries = [],
-  teacherSettings = { chatState: 'active', allowComplement: true, hideDigressions: true },
+  teacherSettings = { chatState: 'active', allowComplement: true, hideDigressions: false },
   currentTimeFormatted = '00:00'
 }) {
   // 1. Control Docente: Si el profesor puso Modo Pizarra, pausar el chat
   if (teacherSettings.chatState === 'paused') {
     return {
       status: 'paused',
-      answer: `⏸️ **Modo Pizarra Activo**\n\nEl profesor ha pausado temporalmente el chat para que todos presten atención a la explicación en la pizarra. Tu pregunta ha quedado guardada en espera para cuando el profesor reactive el chat.`,
+      questionType: 'paused',
+      canForwardToTeacher: false,
+      answer: `⏸️ **Modo Pizarra Activo**\n\nEl profesor ha pausado temporalmente el chat para que todos presten atención a la explicación en curso. Tu consulta quedó registrada para cuando se reactive el chat.`,
       sources: []
     };
   }
 
-  // 2. Construir Contexto Estructurado con Citas Verificables
+  // 2. Construir Contexto Estructurado preservando SIEMPRE los IDs exactos [VIVO-X]
   let contextBlocks = [];
 
-  // A. Historial de Clases Previas
+  // A. Transcripción en Vivo de la Clase de Hoy (Prioridad #1: lo que el profesor está diciendo ahora mismo)
+  if (liveEntries.length > 0) {
+    liveEntries.forEach((entry) => {
+      const segId = entry.id; // Mantiene siempre el ID real (ej. VIVO-1, VIVO-2...)
+      contextBlocks.push(`[${segId}] (Dicho EN VIVO hoy en min [${entry.timestamp}] por ${entry.speaker}):\n"${entry.text}"`);
+    });
+  }
+
+  // B. Historial de Clases Previas del Curso
   if (course.historicalClasses && course.historicalClasses.length > 0) {
     course.historicalClasses.forEach(hc => {
       let fText = (hc.keyFormulas || []).map(f => `  - $${f}$`).join('\n');
@@ -302,103 +344,104 @@ export async function answerStudentQuestion({
     });
   }
 
-  // B. Materiales y Guías
+  // C. Materiales y Guías
   if (course.materials && course.materials.length > 0) {
     course.materials.forEach(mat => {
       contextBlocks.push(`[${mat.id}] (Material del Curso — ${mat.title}, ${mat.pages}):\n${mat.content}`);
     });
   }
 
-  // C. Transcripción en Vivo de la Clase de Hoy
-  const validLiveEntries = liveEntries.filter(entry => {
-    if (teacherSettings.hideDigressions && entry.category === 'digresion') {
-      return false;
-    }
-    return true;
-  });
-
-  if (validLiveEntries.length > 0) {
-    validLiveEntries.forEach((entry, idx) => {
-      const segId = `VIVO-${idx + 1}`;
-      contextBlocks.push(`[${segId}] (Dicho en clase en min [${entry.timestamp}] por ${entry.speaker}):\n${entry.text}`);
-    });
-  }
-
   const fullContextText = contextBlocks.join('\n\n---\n\n');
 
-  // 3. System Prompt Pedagógico y Reglas de Citas
-  const systemInstruction = `Eres "Cátedra Viva", el tutor pedagógico inteligente del curso universitario "${course.code} — ${course.name}", dictado por el ${course.instructor}.
-Tu misión es acompañar a los estudiantes durante la clase presencial resolviendo dudas con rigor académico, empatía y honestidad sobre las fuentes.
+  // 3. System Prompt con distinción clara entre Off-Topic (Mundial/Chistes) vs. Duda Académica No Vista
+  const systemInstruction = `Eres "Cátedra Viva", el tutor pedagógico de aula aumentada para la clase en vivo del ${course.instructor} (Curso base: "${course.code} — ${course.name}").
 
-REGLAS CRÍTICAS DE CONTROL Y RESPUESTA:
+REGLAS CRÍTICAS DE RESPUESTA (SÍGUELAS ESTRICTAMENTE):
 
-1. CITAS OBLIGATORIAS VERIFICABLES:
-- Cada afirmación teórica, fórmula o referencia a lo dicho DEBE citar obligatoriamente la etiqueta exacta de donde la obtuviste (ejemplo: "[VIVO-2]", "[HIST-M1]" o "[MAT-M1]").
-- La interfaz del estudiante convertirá automáticamente estas etiquetas en botones clicables interactivos (ej: "min 00:25", "Clase 1"). No inventes etiquetas.
+1. DISTINCIÓN ENTRE PREGUNTA OFF-TOPIC vs. DUDA ACADÉMICA SIN FUENTE vs. PREGUNTA CON FUENTE:
+   - CASO A (OFF-TOPIC / AJENO A LA UNIVERSIDAD: deportes, quién ganó el mundial, farándula, chistes, política contingente, videojuegos, geografía general):
+     Empieza tu respuesta con la marca exacta "@@OFF_TOPIC@@" y escribe únicamente:
+     "🚫 Esa pregunta no está relacionada con la clase ni con materias académicas del curso."
+     (NUNCA ofrezcas preguntarle al profesor temas off-topic como el mundial).
 
-2. TRES MODOS DE RESPUESTA SEGÚN EL TIPO DE PREGUNTA:
-A. Factual o Logística (ej. "¿cuándo es la entrega?", "¿qué valor tiene la constante?"):
-   - Responde de forma directa, concisa y citando la fuente.
-B. Conceptual (ej. "¿por qué la curva IS tiene pendiente negativa?", "¿qué es el Teorema de Bayes?"):
-   - Explica el concepto con claridad, usando ejemplos y notación matemática formal en LaTeX con $...$ o $$...$$.
-C. Ejercicio o Cálculo Práctico (ESCALERA SOCRÁTICA EN 5 NIVELES):
-   - Si el estudiante plantea un ejercicio o pregunta cómo calcularlo, NO regales la respuesta en el primer turno para evitar la atrofia del aprendizaje.
-   - Nivel 1 (Pista Conceptual): Identifica las fórmulas o teoremas aplicables y pregúntale cuál es el primer paso.
-   - Nivel 2-4: Guía paso a paso según lo que el alumno intente.
-   - Nivel 5 (Si el alumno explícitamente se rinde o pide la solución completa): Muestra el desarrollo algebraico paso a paso en LaTeX y CIERRA OBLIGATORIAMENTE con una breve pregunta de verificación conceptual ("¿Qué pasaría si cambiamos este valor?").
+   - CASO B (DUDA ACADÉMICA / UNIVERSITARIA, PERO QUE AÚN NO APARECE EN LAS FUENTES ENTREGADAS):
+     Si el alumno pregunta un concepto académico válido que NO se menciona ni en la transcripción en vivo [VIVO-X] ni en el historial/guías [HIST-X]/[MAT-X]:
+     Empieza tu respuesta con la marca exacta "@@SIN_FUENTE_CLASE@@" seguida de:
+     "Eso aún no se ha mencionado en lo que va de clase ni en el material cargado."
+     ${teacherSettings.allowComplement
+       ? `Y luego, dado que el profesor tiene ACTIVO el Complemento IA, agrega la marca "@@COMPLEMENTO@@" seguida de una breve explicación académica rigurosa para orientar al alumno.`
+       : `Como el profesor tiene apagado el Complemento IA, invita al alumno a usar el botón de abajo para enviársela como duda anónima al profesor.`}
 
-3. COMPLEMENTO DEL TUTOR:
-${teacherSettings.allowComplement 
-  ? `- El profesor ha HABILITADO el complemento de la IA. Si la respuesta se beneficia de una analogía o ejemplo extra que NO se dijo textualmente en clase, escribe primero la respuesta basada en fuentes y luego, en una nueva línea separada, escribe exactamente la marca "@@COMPLEMENTO@@" seguida de tu explicación adicional (la app la pondrá en un recuadro violeta de IA).`
-  : `- El profesor ha DESHABILITADO el complemento externo. Responde EXCLUSIVAMENTE con lo que está en el contexto entregado.`}
+   - CASO C (PREGUNTA SOBRE LO DICHO EN LA TRANSCRIPCIÓN EN VIVO [VIVO-X] O EN EL MATERIAL [HIST-X]/[MAT-X]):
+     ¡PRIORIZA SIEMPRE LO QUE EL PROFESOR ACABA DE DECIR EN VIVO ([VIVO-X])! Incluso si el profesor en vivo está introduciendo un ejemplo de otro tema (como IS-LM o cálculo), responde sobre lo que dijo citando "[VIVO-X]".
+     Cita obligatoriamente las fuentes usadas con sus corchetes exactos: "[VIVO-1]", "[HIST-M1]", "[MAT-M1]".
 
-4. FILTRO DE ALCANCE Y HONESTIDAD (SIN FUENTE):
-- Si la pregunta es sobre temas que NO están en la transcripción ni en el material del curso (o temas off-topic como fútbol, chistes o geografía):
-  DEBES responder EXACTAMENTE:
-  "Eso no se ha visto en esta clase ni en el material del curso. ¿Quieres que se lo pregunte al profesor?"`;
+2. MODOS PEDAGÓGICOS PARA EL CASO C:
+   - Preguntas Factuales o Conceptuales: Explicación directa, clara y concisa con citas "[VIVO-X]" / "[HIST-X]" y fórmulas en LaTeX ($...$ o $$...$$).
+   - Ejercicios o Cálculos Prácticos (ESCALERA SOCRÁTICA):
+     * En el primer intento: Da una Pista Conceptual (Nivel 1), muestra la fórmula aplicable en LaTeX y haz una pregunta guía para el primer paso.
+     * Si el alumno pide explícitamente el paso a paso o dice que no pudo: Entrega la resolución completa en LaTeX y cierra con una pregunta de verificación.
 
-  const userPrompt = `[ESTADO ACTUAL DE LA CLASE EN VIVO]
-Minuto de la clase: ${currentTimeFormatted}
+3. COMPLEMENTO IA OPCIONAL (en Caso C):
+   ${teacherSettings.allowComplement
+     ? `- Si la explicación basada en la clase es muy breve (porque el profesor recién dijo 1 o 2 frases en vivo) y puedes enriquecerla con contexto académico propio, responde primero citando "[VIVO-X]" y luego añade en una nueva línea "@@COMPLEMENTO@@" con la explicación extendida.`
+     : `- NO agregues nada fuera de lo que dicen las fuentes entregadas.`}`;
 
-[CONTEXTO DE FUENTES VERIFICABLES DISPONIBLES]:
-${fullContextText || '(La clase recién comienza, aún no hay material ni intervenciones)'}
+  const userPrompt = `[MINUTO ACTUAL DE LA CLASE]: ${currentTimeFormatted}
+
+[FUENTES VERIFICABLES DISPONIBLES (EN VIVO + HISTORIAL + GUÍAS)]:
+${fullContextText || '(La clase recién comienza)'}
 
 [PREGUNTA DEL ESTUDIANTE]:
 "${question}"
 
-Genera tu respuesta pedagógica en Markdown con notación LaTeX:`;
+Respuesta:`;
 
-  // 4. Inferencia con Pool de Modelos en Cascada (Groq Qwen 27B / GPT-OSS 120B -> Gemini 3.8 Flash)
+  // 4. Pool de Modelos Exclusivos para el Chatbot (Bucket 4: qwen/qwen3.8-27b -> Bucket 5: openai/gpt-oss-120b -> Bucket 6: gemini-3.8-flash)
   let rawAnswer = '';
+  let modelUsed = '';
 
   if (GROQ_API_KEY) {
-    try {
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'qwen/qwen3.8-27b',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: userPrompt }
-          ],
-          temperature: 0.2,
-          max_tokens: 800
-        })
-      });
+    const chatModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b'];
+    for (const modelId of chatModels) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: modelId,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.2,
+            max_tokens: 850
+          })
+        });
 
-      if (res.ok) {
-        const data = await res.json();
-        rawAnswer = data.choices?.[0]?.message?.content?.trim() || '';
+        if (res.status === 429) {
+          console.warn(`[Chatbot Pool] Rate limit en ${modelId}, rotando automáticamente al siguiente bucket...`);
+          continue;
+        }
+
+        if (res.ok) {
+          const data = await res.json();
+          rawAnswer = data.choices?.[0]?.message?.content?.trim() || '';
+          if (rawAnswer) {
+            modelUsed = modelId;
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Chatbot Pool] Fallo con ${modelId}:`, err.message);
       }
-    } catch (err) {
-      console.warn('[answerStudentQuestion] Fallo con Groq Qwen 27B:', err.message);
     }
   }
 
+  // Fallback a Bucket 6 (Gemini 3.8 Flash)
   if (!rawAnswer && GEMINI_API_KEY) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
@@ -406,16 +449,17 @@ Genera tu respuesta pedagógica en Markdown con notación LaTeX:`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 800 }
+          generationConfig: { temperature: 0.2, maxOutputTokens: 850 }
         })
       });
 
       if (res.ok) {
         const data = await res.json();
         rawAnswer = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        modelUsed = 'gemini-3.8-flash';
       }
     } catch (e) {
-      console.warn('[answerStudentQuestion] Fallo en fallback Gemini:', e.message);
+      console.warn('[Chatbot Pool] Fallo en fallback Gemini:', e.message);
     }
   }
 
@@ -423,18 +467,33 @@ Genera tu respuesta pedagógica en Markdown con notación LaTeX:`;
     throw new Error('No se pudo obtener respuesta de ningún motor de IA.');
   }
 
-  // Separar complemento IA si existe
-  let mainAnswer = rawAnswer;
+  // Procesar marcas de control
+  const isOffTopic = rawAnswer.includes('@@OFF_TOPIC@@');
+  const isUnseenAcademic = rawAnswer.includes('@@SIN_FUENTE_CLASE@@');
+
+  let cleanedRaw = rawAnswer
+    .replace(/@@OFF_TOPIC@@/g, '')
+    .replace(/@@SIN_FUENTE_CLASE@@/g, '')
+    .trim();
+
+  let mainAnswer = cleanedRaw;
   let complementText = null;
 
-  if (rawAnswer.includes('@@COMPLEMENTO@@')) {
-    const parts = rawAnswer.split('@@COMPLEMENTO@@');
+  if (cleanedRaw.includes('@@COMPLEMENTO@@')) {
+    const parts = cleanedRaw.split('@@COMPLEMENTO@@');
     mainAnswer = parts[0].trim();
     complementText = parts[1].trim();
   }
 
+  if (!teacherSettings.allowComplement) {
+    complementText = null;
+  }
+
   return {
     status: 'ok',
+    questionType: isOffTopic ? 'off_topic' : isUnseenAcademic ? 'unseen_academic' : 'grounded',
+    canForwardToTeacher: isUnseenAcademic,
+    modelUsed,
     answer: mainAnswer,
     complement: complementText,
     timestamp: new Date().toISOString()
@@ -461,7 +520,7 @@ Responde un JSON con:
         method: 'POST',
         headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'qwen/qwen3.8-27b',
+          model: 'openai/gpt-oss-120b',
           messages: [
             { role: 'system', content: systemInstruction },
             { role: 'user', content: fullTranscript || 'Sin transcripción' }

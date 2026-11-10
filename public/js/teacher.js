@@ -14,9 +14,11 @@ let lectureSeconds = 0;
 let isSimulating = false;
 let simulationInterval = null;
 
-// Calibración de Auto-Ancla de Voz del Profesor
+// Calibración de Auto-Ancla de Voz del Profesor & Noise Gate Acústico
 let teacherRmsAnchor = null;
 let isAnchorCalibrated = false;
+let currentChunkMaxVolume = 0; // Rastrea volumen pico del chunk actual para filtrar silencios
+let uploadQueue = Promise.resolve(); // Cola secuencial de subida para garantizar orden cronológico
 
 // DOM Elements
 const btnToggleMic = document.getElementById('btnToggleMic');
@@ -29,6 +31,7 @@ const btnSimulateOneMin = document.getElementById('btnSimulateOneMin');
 const feedList = document.getElementById('feedList');
 const feedEmptyState = document.getElementById('feedEmptyState');
 const chaptersList = document.getElementById('chaptersList');
+const forwardedQuestionsList = document.getElementById('forwardedQuestionsList');
 const statWpm = document.getElementById('statWpm');
 const statWords = document.getElementById('statWords');
 const statLostCount = document.getElementById('statLostCount');
@@ -158,6 +161,9 @@ async function fetchState() {
     // Capítulos
     renderChapters(state.chapters);
 
+    // Dudas enviadas por estudiantes
+    renderStudentQuestions(state.forwardedQuestions, state.questions);
+
     // Feed
     if (state.entries && state.entries.length > 0) {
       if (feedEmptyState.parentNode === feedList) feedEmptyState.style.display = 'none';
@@ -166,6 +172,52 @@ async function fetchState() {
   } catch (err) {
     console.warn('Error sincronizando estado del profesor:', err);
   }
+}
+
+function renderStudentQuestions(forwarded = [], allQuestions = []) {
+  if (!forwardedQuestionsList) return;
+  if ((!forwarded || forwarded.length === 0) && (!allQuestions || allQuestions.length === 0)) {
+    forwardedQuestionsList.innerHTML = `<div style="color: var(--text-muted);">Las dudas enviadas por los alumnos aparecerán aquí en tiempo real.</div>`;
+    return;
+  }
+
+  forwardedQuestionsList.innerHTML = '';
+
+  // Mostrar primero las dudas escaladas directamente al profesor
+  forwarded.slice().reverse().forEach(fq => {
+    const card = document.createElement('div');
+    card.style.padding = '0.45rem 0.6rem';
+    card.style.background = 'rgba(245, 158, 11, 0.14)';
+    card.style.borderRadius = '6px';
+    card.style.borderLeft = '3px solid #F59E0B';
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #FCD34D; font-weight: 700;">
+        <span>🙋‍♂️ DUDA PARA EL PROFESOR [${fq.timestamp}]</span>
+        <span>${fq.createdAt || ''}</span>
+      </div>
+      <div style="margin-top: 0.2rem; font-weight: 600; color: #F8FAFC;">"${fq.question}"</div>
+    `;
+    forwardedQuestionsList.appendChild(card);
+  });
+
+  // Mostrar preguntas recientes hechas al tutor IA
+  allQuestions.slice(-4).reverse().forEach(q => {
+    const badgeColor = q.questionType === 'off_topic' ? '#F87171' : (q.questionType === 'unseen_academic' ? '#FCD34D' : '#6EE7B7');
+    const badgeLabel = q.questionType === 'off_topic' ? '🚫 Off-Topic bloqueado' : (q.questionType === 'unseen_academic' ? '❓ No visto aún' : '✓ Respondida por IA');
+    const card = document.createElement('div');
+    card.style.padding = '0.35rem 0.55rem';
+    card.style.background = 'rgba(15, 23, 42, 0.55)';
+    card.style.borderRadius = '6px';
+    card.style.borderLeft = `2px solid ${badgeColor}`;
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; font-size: 0.68rem;">
+        <span style="color: var(--text-muted);">[${q.timestamp}] Chat Tutor</span>
+        <span style="color: ${badgeColor}; font-weight: 700;">${badgeLabel}</span>
+      </div>
+      <div style="margin-top: 0.15rem; color: #CBD5E1;">${q.question}</div>
+    `;
+    forwardedQuestionsList.appendChild(card);
+  });
 }
 
 function renderChapters(chapters = []) {
@@ -257,9 +309,9 @@ async function startRecording() {
       micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }, 1000);
 
-    // Ciclo de trozos de audio (cada 4.8s)
+    // Ciclo continuo de trozos de audio (4.5s exactos sin hueco de 400ms)
     recordSingleChunk();
-    chunkCycleInterval = setInterval(recordSingleChunk, 4800);
+    chunkCycleInterval = setInterval(recordSingleChunk, 4500);
 
   } catch (err) {
     alert('No se pudo acceder al micrófono: ' + err.message);
@@ -293,22 +345,33 @@ function recordSingleChunk() {
   const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/mp4';
   const rec = new MediaRecorder(mediaStream, { mimeType: mime });
   const chunks = [];
+  const chunkStartSecond = lectureSeconds;
+  currentChunkMaxVolume = 0; // Reiniciar pico de volumen para este chunk
 
   rec.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
-  rec.onstop = async () => {
+  rec.onstop = () => {
+    const peakVol = currentChunkMaxVolume;
     if (chunks.length > 0) {
+      // Noise Gate Acústico: si el volumen máximo del bloque fue < 6% (silencio), no gastar request ni alucinar "Gracias."
+      if (peakVol < 6) {
+        console.log(`[Noise Gate] Silencio detectado en seg ${chunkStartSecond} (pico ${peakVol}%). Omitiendo envío a Whisper.`);
+        return;
+      }
       const blob = new Blob(chunks, { type: mime });
-      await sendChunkToServer(blob, lectureSeconds);
+      // Encolar secuencialmente para garantizar que el chunk N siempre llegue antes que el N+1
+      uploadQueue = uploadQueue
+        .then(() => sendChunkToServer(blob, chunkStartSecond))
+        .catch(err => console.warn('Error en cola de audio:', err));
     }
   };
 
   rec.start();
   setTimeout(() => {
     if (rec.state === 'recording') rec.stop();
-  }, 4400);
+  }, 4500);
 }
 
 async function sendChunkToServer(audioBlob, currentSeconds) {
@@ -347,6 +410,10 @@ function startVuMeter() {
     const avg = sum / dataArray.length;
     const pct = Math.min(100, Math.round((avg / 128) * 100));
     vuBar.style.width = pct + '%';
+
+    if (pct > currentChunkMaxVolume) {
+      currentChunkMaxVolume = pct;
+    }
 
     // Auto-calibración durante primeros 6 segundos
     if (lectureSeconds <= 6 && pct > 20 && !isAnchorCalibrated) {

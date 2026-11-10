@@ -59,13 +59,15 @@ let liveSession = {
   elapsedSeconds: 0,
   entries: [],
   chapters: [
-    { minute: '00:00', title: 'Apertura y Objetivos' }
+    { minute: '00:00', seconds: 0, title: 'Apertura y Objetivos' }
   ],
   lostAlerts: [], // Array de { timestamp, count }
+  questions: [], // Historial de preguntas de estudiantes en vivo
+  forwardedQuestions: [], // Dudas académicas enviadas al profesor
   teacherSettings: {
     chatState: 'active', // 'active' | 'paused' (Modo Pizarra)
     allowComplement: true, // Recuadro violeta de conocimiento IA
-    hideDigressions: true, // Ocultar anécdotas/desvaríos en la vista alumno
+    hideDigressions: false, // Por defecto mostrar todo para no ocultar introducciones
     noiseGateThreshold: -35 // dBFS en frontend
   }
 };
@@ -123,7 +125,9 @@ app.post('/api/courses/select', (req, res) => {
   liveSession.courseId = courseId;
   liveSession.entries = [];
   liveSession.lostAlerts = [];
-  liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+  liveSession.questions = [];
+  liveSession.forwardedQuestions = [];
+  liveSession.chapters = [{ minute: '00:00', seconds: 0, title: 'Apertura y Objetivos' }];
   liveSession.elapsedSeconds = 0;
   liveSession.isActive = false;
 
@@ -144,6 +148,8 @@ app.get('/api/live/state', (req, res) => {
     chapters: liveSession.chapters,
     lostCountTotal: liveSession.lostAlerts.reduce((acc, curr) => acc + (curr.count || 1), 0),
     lostAlertsRecent: liveSession.lostAlerts.slice(-5),
+    questions: liveSession.questions.slice(-10),
+    forwardedQuestions: liveSession.forwardedQuestions.slice(-10),
     pace
   });
 });
@@ -175,11 +181,15 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
 
     const audioBuffer = fs.readFileSync(tempConverted);
 
-    // 1. Transcribir con Groq Whisper Large v3 Turbo inyectando el glosario del curso
+    // Obtener las últimas 2 frases para darle continuidad sintáctica a Whisper
+    const recentContext = liveSession.entries.slice(-2).map(e => e.text).join(' ');
+
+    // 1. Transcribir con Groq Whisper Large v3 Turbo inyectando el glosario del curso y continuidad
     const transcribedText = await transcribeLiveAudio(
       audioBuffer, 
       'audio/mp3', 
-      currentCourse.glossary
+      currentCourse.glossary,
+      recentContext
     );
 
     // Limpiar temporales
@@ -187,7 +197,7 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
     try { fs.unlinkSync(tempConverted); tempConverted = null; } catch (_) {}
 
     const secNum = parseInt(elapsedSeconds, 10) || liveSession.elapsedSeconds || 0;
-    liveSession.elapsedSeconds = secNum + 5;
+    liveSession.elapsedSeconds = Math.max(liveSession.elapsedSeconds, secNum + 4);
     liveSession.isActive = true;
 
     const m = Math.floor(secNum / 60);
@@ -200,11 +210,11 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
         entry: null,
         timestamp,
         text: '',
-        message: 'Silencio o ruido no vocal filtrado'
+        message: 'Silencio o alucinación de silencio filtrada'
       });
     }
 
-    // 2. Micro-Labeler Semántico: clasifica categoría, LaTeX, orador y capítulo
+    // 2. Micro-Labeler Semántico: clasifica categoría, LaTeX, orador y capítulo (en su propio bucket openai/gpt-oss-20b)
     const labeled = await labelAndCleanSegment({
       text: transcribedText,
       previousSegments: liveSession.entries,
@@ -228,12 +238,29 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
 
     liveSession.entries.push(newEntry);
 
-    // Actualizar capítulos inteligentes si hay un cambio de subtema
-    if (labeled.chapterTitle && labeled.chapterTitle.length > 2) {
+    // Ordenar entradas por segundo si hubo inversión de red y mantener IDs estables
+    liveSession.entries.sort((a, b) => a.seconds - b.seconds);
+    liveSession.entries.forEach((entry, idx) => {
+      entry.id = `VIVO-${idx + 1}`;
+    });
+
+    // Actualizar capítulos inteligentes con Debounce (mínimo 5 palabras, no digresión y >=15s desde el último capítulo)
+    const wordCount = newEntry.text.split(/\s+/).filter(Boolean).length;
+    if (
+      labeled.chapterTitle &&
+      labeled.chapterTitle.length > 3 &&
+      labeled.category !== 'digresion' &&
+      wordCount >= 5
+    ) {
       const lastChapter = liveSession.chapters[liveSession.chapters.length - 1];
-      if (!lastChapter || lastChapter.title.toLowerCase() !== labeled.chapterTitle.toLowerCase()) {
+      const lastChapterSec = lastChapter?.seconds || 0;
+      const isDifferentTitle = !lastChapter || lastChapter.title.toLowerCase() !== labeled.chapterTitle.toLowerCase();
+      const enoughTimeElapsed = (secNum - lastChapterSec) >= 15 || liveSession.chapters.length === 1;
+
+      if (isDifferentTitle && enoughTimeElapsed) {
         liveSession.chapters.push({
           minute: timestamp,
+          seconds: secNum,
           title: labeled.chapterTitle
         });
       }
@@ -394,7 +421,9 @@ app.post('/api/teacher/close-class', async (req, res) => {
     // Reiniciar sesión en vivo para la próxima
     liveSession.entries = [];
     liveSession.lostAlerts = [];
-    liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+    liveSession.questions = [];
+    liveSession.forwardedQuestions = [];
+    liveSession.chapters = [{ minute: '00:00', seconds: 0, title: 'Apertura y Objetivos' }];
     liveSession.isActive = false;
     liveSession.elapsedSeconds = 0;
 
@@ -413,7 +442,9 @@ app.post('/api/teacher/close-class', async (req, res) => {
 app.post('/api/live/reset', (req, res) => {
   liveSession.entries = [];
   liveSession.lostAlerts = [];
-  liveSession.chapters = [{ minute: '00:00', title: 'Apertura y Objetivos' }];
+  liveSession.questions = [];
+  liveSession.forwardedQuestions = [];
+  liveSession.chapters = [{ minute: '00:00', seconds: 0, title: 'Apertura y Objetivos' }];
   liveSession.isActive = false;
   liveSession.elapsedSeconds = 0;
   console.log('[Cátedra Viva] Transcripción en vivo reiniciada');
@@ -421,7 +452,7 @@ app.post('/api/live/reset', (req, res) => {
 });
 
 // --------------------------------------------------------------------------
-// API 5: CHATBOT TUTOR PEDAGÓGICO PARA ESTUDIANTES
+// API 5: CHATBOT TUTOR PEDAGÓGICO PARA ESTUDIANTES Y ENVÍO DE DUDAS AL PROFE
 // --------------------------------------------------------------------------
 
 app.post('/api/chat', async (req, res) => {
@@ -442,12 +473,42 @@ app.post('/api/chat', async (req, res) => {
       currentTimeFormatted
     });
 
+    // Registrar pregunta en el log en vivo de la sesión
+    liveSession.questions.push({
+      id: `Q-${liveSession.questions.length + 1}`,
+      question: question.trim(),
+      questionType: response.questionType || 'grounded',
+      timestamp: currentTimeFormatted,
+      createdAt: new Date().toISOString()
+    });
+
+    console.log(`[Student Chat] [${currentTimeFormatted}] (${response.questionType}): "${question.trim()}"`);
+
     res.json(response);
 
   } catch (error) {
     console.error('Error en /api/chat:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+app.post('/api/live/forward-question', (req, res) => {
+  const { question, timestamp = '00:00' } = req.body;
+  if (!question || !question.trim()) {
+    return res.status(400).json({ error: 'Pregunta vacía' });
+  }
+
+  const forwarded = {
+    id: `FWD-${liveSession.forwardedQuestions.length + 1}`,
+    question: question.trim(),
+    timestamp,
+    createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+
+  liveSession.forwardedQuestions.push(forwarded);
+  console.log(`[Forwarded Question] Duda académica enviada al profesor en [${timestamp}]: "${question.trim()}"`);
+
+  res.json({ success: true, forwarded });
 });
 
 // --------------------------------------------------------------------------
