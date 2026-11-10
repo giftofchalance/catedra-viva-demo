@@ -81,7 +81,9 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
       : mimeType.includes('wav') ? 'wav'
       : 'webm';
 
-    const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
+    // Usar PRIMERO whisper-large-v3 (modelo completo de 32 capas, máxima precisión en español técnico)
+    // y como segundo bucket whisper-large-v3-turbo (20 RPM adicionales)
+    const whisperModels = ['whisper-large-v3', 'whisper-large-v3-turbo'];
 
     for (const modelName of whisperModels) {
       try {
@@ -106,16 +108,14 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
         if (res.ok) {
           const data = await res.json();
 
-          // Filtrar segmentos usando las métricas acústicas reales de Whisper (no_speech_prob y avg_logprob)
+          // Solo descartar segmentos si simultáneamente tienen altísima probabilidad de silencio (>0.85) y muy baja confianza (<-1.0)
           if (Array.isArray(data.segments) && data.segments.length > 0) {
             const validSegments = data.segments.filter(seg => {
               const noSpeech = typeof seg.no_speech_prob === 'number' ? seg.no_speech_prob : 0;
               const avgLogProb = typeof seg.avg_logprob === 'number' ? seg.avg_logprob : 0;
               const compRatio = typeof seg.compression_ratio === 'number' ? seg.compression_ratio : 1;
-              // Si Whisper detecta alta probabilidad de no-voz (>0.55) o muy baja confianza acústica (<-0.95), es ruido/alucinación
-              if (noSpeech > 0.55) return false;
-              if (avgLogProb < -0.95) return false;
-              if (compRatio > 2.4) return false;
+              if (noSpeech > 0.85 && avgLogProb < -0.95) return false;
+              if (compRatio > 2.6) return false;
               return true;
             });
 
@@ -195,12 +195,12 @@ export async function labelAndCleanSegment({ text, previousSegments = [], course
   const prevContext = previousSegments.slice(-2).map(s => `[${s.timestamp}] ${s.text}`).join('\n');
 
   const systemInstruction = `Eres el analizador semántico en tiempo real de una clase universitaria ("${courseName}").
-Términos frecuentes del curso (úsalos SOLO para corregir ortografía si el profesor los pronuncia fonéticamente, NUNCA los inventes si no los dijo): ${courseGlossary || 'IS-LM, Bayes, tasas'}.
+Términos frecuentes del curso y afines (úsalos SOLO para corregir ortografía si el profesor los pronuncia fonéticamente, ej. "KPM" -> "CAPM", "ISLM" -> "IS-LM", NUNCA los inventes si no los dijo): ${courseGlossary || 'CAPM, IS-LM, beta, riesgo sistemático, riesgo idiosincrático, portafolio, varianza, Bayes'}.
 Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
 {
   "speakerRole": "profesor" | "interrupcion",
   "category": "concepto_clave" | "formula" | "importancia" | "digresion",
-  "cleanedText": "Texto con ortografía técnica corregida (ej. IS-LM, FRAs, Bayes) y ecuaciones en $LaTeX$",
+  "cleanedText": "Texto completo del profesor con ortografía técnica corregida (ej. CAPM, IS-LM, FRAs, Bayes) sin resumir ni omitir palabras",
   "chapterTitle": "Título corto de 2 a 4 palabras del tema académico, o null si es solo continuación",
   "keyTerms": ["termino1"]
 }
@@ -258,7 +258,10 @@ REGLAS CRÍTICAS DE CLASIFICACIÓN:
 function normalizeSpokenTerms(text) {
   return text
     .replace(/\bISLM\b/gi, 'IS-LM')
-    .replace(/\bis lm\b/gi, 'IS-LM');
+    .replace(/\bis lm\b/gi, 'IS-LM')
+    .replace(/\bKPM\b/g, 'CAPM')
+    .replace(/\bkpm\b/gi, 'CAPM')
+    .replace(/\bC\.?A\.?P\.?M\.?\b/gi, 'CAPM');
 }
 
 function detectHeuristicCategory(text) {

@@ -90,21 +90,21 @@ export const COURSES_DB = {
   finanzas: {
     id: 'finanzas',
     code: 'IN5233',
-    name: 'Ingeniería Financiera y Derivados',
+    name: 'Ingeniería Financiera y Portafolios',
     instructor: 'Prof. Bruno Castro',
     badgeColor: '#059669',
-    description: 'Valoración de instrumentos de renta fija, estructura temporal de tasas de interés y derivados financieros (swaps, FRAs, forwards).',
-    glossary: 'tasa de interés, swaps de tasa de interés, FRAs, forward rate agreements, forwards de moneda, bono cero cupón, convenciones 30/360, Act/360, Act/365, rentabilidad anual, factor de descuento, capitalización compuesta, estructura temporal de tasas, curva cupón cero, tasa spot.',
+    description: 'Valorización de activos (CAPM), teoría de portafolios de Markowitz, estructura de tasas y derivados financieros.',
+    glossary: 'CAPM, beta, riesgo sistemático, riesgo idiosincrático, diversificación, varianza del portafolio, correlación, retorno esperado, tasa libre de riesgo, prima por riesgo de mercado, frontera eficiente, swaps de tasa de interés, FRAs, convenciones 30/360, Act/365.',
     historicalClasses: [
       {
         id: 'HIST-F1',
         classNumber: 1,
-        title: 'Clase 1: Valor del Dinero en el Tiempo y Convenciones de Días',
-        summary: 'Capitalización simple vs. capitalización compuesta anual y continua: VF = VP * (1+r)^t y VF = VP * e^(rt). Convenciones de conteo de días en el mercado financiero: convención 30/360 (meses comerciales de 30 días, año de 360 días), Actual/360 y Actual/365. Equivalencia entre tasas nominales y tasas efectivas.',
+        title: 'Clase 1: Teoría de Portafolios de Markowitz, Varianza y Diversificación',
+        summary: 'Retorno esperado y varianza de un portafolio de dos activos. Efecto de la correlación menor que 1 en la reducción del riesgo total del portafolio sin sacrificar retorno esperado. Distinción entre riesgo idiosincrático (diversificable) y riesgo sistemático o de mercado (no diversificable).',
         keyFormulas: [
-          'VF = VP \\cdot (1 + r)^t',
-          'VF = VP \\cdot e^{r \\cdot t}',
-          '\\text{Base 30/360}: 360(Y_2 - Y_1) + 30(M_2 - M_1) + (D_2 - D_1)'
+          'E(R_p) = w_1 E(R_1) + w_2 E(R_2)',
+          '\\sigma_p^2 = w_1^2 \\sigma_1^2 + w_2^2 \\sigma_2^2 + 2 w_1 w_2 \\rho_{1,2} \\sigma_1 \\sigma_2',
+          '\\text{CAPM}: E(R_i) = R_f + \\beta_i \\cdot (E(R_m) - R_f)'
         ]
       },
       {
@@ -121,9 +121,9 @@ export const COURSES_DB = {
     materials: [
       {
         id: 'MAT-F1',
-        title: 'Apunte 1 — Tasas de Interés, Convenciones y Mercados de Derivados',
+        title: 'Apunte 1 — Valorización de Activos (CAPM), Portafolios y Derivados',
         pages: 'p. 1–15',
-        content: 'Definición de swaps de tasa de interés (IRS), forwards de moneda y acuerdos de tasas futuras (FRAs). Explicación de las convenciones 30/360 vs Act/365 en bonos corporativos y depósitos bancarios.'
+        content: 'Modelo CAPM: el retorno exigido de un activo depende de la tasa libre de riesgo (Rf), su beta y la prima por riesgo de mercado (E(Rm) - Rf). La beta mide únicamente el riesgo sistemático; el riesgo idiosincrático se elimina mediante diversificación al combinar activos con correlación menor que 1.'
       }
     ]
   }

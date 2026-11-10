@@ -14,10 +14,11 @@ let lectureSeconds = 0;
 let isSimulating = false;
 let simulationInterval = null;
 
-// Calibración de Auto-Ancla de Voz del Profesor & Noise Gate Acústico
+// Calibración de Auto-Ancla de Voz del Profesor & Medidor Acústico Instantáneo
 let teacherRmsAnchor = null;
 let isAnchorCalibrated = false;
-let currentChunkMaxVolume = 0; // Rastrea volumen pico del chunk actual para filtrar silencios
+let latestInstantVolume = 0; // Volumen instantáneo actual (0-100)
+let activeRecorder = null; // Instancia actual de MediaRecorder
 let uploadQueue = Promise.resolve(); // Cola secuencial de subida para garantizar orden cronológico
 
 // DOM Elements
@@ -276,6 +277,9 @@ function renderFeedEntries(entries) {
 
 async function startRecording() {
   try {
+    micStatusText.textContent = '⏳ Activando micrófono...';
+    micStatusText.style.color = '#FCD34D';
+
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
@@ -297,7 +301,7 @@ async function startRecording() {
     isRecording = true;
     btnToggleMic.classList.add('recording');
     micIcon.textContent = '⏹';
-    micStatusText.textContent = 'Transmitiendo en vivo con Whisper...';
+    micStatusText.textContent = '🔴 ¡Habla ahora! Transmitiendo en vivo...';
     micStatusText.style.color = '#EF4444';
 
     startVuMeter();
@@ -310,11 +314,13 @@ async function startRecording() {
       micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }, 1000);
 
-    // Ciclo continuo de trozos de audio (4.5s exactos sin hueco de 400ms)
-    recordSingleChunk();
-    chunkCycleInterval = setInterval(recordSingleChunk, 4500);
+    // Iniciar grabación continua en bloques de 6s con traslape de 350ms (0 pérdida entre bloques y funciona en 2do plano)
+    recordOverlappedChunk();
+    chunkCycleInterval = setInterval(recordOverlappedChunk, 6000);
 
   } catch (err) {
+    micStatusText.textContent = 'Micrófono en espera';
+    micStatusText.style.color = '#94A3B8';
     alert('No se pudo acceder al micrófono: ' + err.message);
   }
 }
@@ -326,9 +332,23 @@ function stopRecording() {
   micStatusText.textContent = 'Micrófono en espera';
   micStatusText.style.color = '#94A3B8';
 
-  if (chunkCycleInterval) clearInterval(chunkCycleInterval);
-  if (timerInterval) clearInterval(timerInterval);
-  if (vuAnimationId) cancelAnimationFrame(vuAnimationId);
+  if (chunkCycleInterval) {
+    clearInterval(chunkCycleInterval);
+    chunkCycleInterval = null;
+  }
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  if (vuAnimationId) {
+    cancelAnimationFrame(vuAnimationId);
+    vuAnimationId = null;
+  }
+
+  if (activeRecorder && activeRecorder.state === 'recording') {
+    try { activeRecorder.stop(); } catch (_) {}
+  }
+  activeRecorder = null;
 
   if (mediaStream) {
     mediaStream.getTracks().forEach(t => t.stop());
@@ -353,39 +373,45 @@ function getBestAudioMimeType() {
   return '';
 }
 
-function recordSingleChunk() {
+/**
+ * Grabación continua con traslape de 350ms:
+ * - Cada 6.0 segundos arranca un nuevo MediaRecorder, y el anterior se detiene a los 6.35 segundos.
+ * - Así NUNCA se corta una palabra en el borde entre dos chunks.
+ * - NO depende de requestAnimationFrame, por lo que sigue grabando al 100% aunque cambies de pestaña o ventana para leer tus apuntes.
+ */
+function recordOverlappedChunk() {
   if (!isRecording || !mediaStream) return;
 
   const mime = getBestAudioMimeType();
   const rec = mime ? new MediaRecorder(mediaStream, { mimeType: mime }) : new MediaRecorder(mediaStream);
+  activeRecorder = rec;
+
   const chunks = [];
   const chunkStartSecond = lectureSeconds;
-  currentChunkMaxVolume = 0; // Reiniciar pico de volumen para este chunk
 
   rec.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
   rec.onstop = () => {
-    const peakVol = currentChunkMaxVolume;
-    if (chunks.length > 0) {
-      // Noise Gate Acústico: solo omitir si hubo silencio digital absoluto (peakVol < 2%)
-      if (peakVol < 2) {
-        console.log(`[Noise Gate] Silencio absoluto en seg ${chunkStartSecond} (pico ${peakVol}%). Omitiendo envío.`);
-        return;
-      }
-      const blob = new Blob(chunks, { type: mime || 'audio/webm' });
-      // Encolar secuencialmente para garantizar que el chunk N siempre llegue antes que el N+1
-      uploadQueue = uploadQueue
-        .then(() => sendChunkToServer(blob, chunkStartSecond))
-        .catch(err => console.warn('Error en cola de audio:', err));
-    }
+    if (chunks.length === 0) return;
+    const blob = new Blob(chunks, { type: mime || 'audio/webm' });
+    if (blob.size < 800) return;
+
+    // Encolar secuencialmente para garantizar que ningún bloque se pierda ni se desordene
+    uploadQueue = uploadQueue
+      .then(() => sendChunkToServer(blob, chunkStartSecond))
+      .catch(err => console.warn('Error en cola de audio:', err));
   };
 
   rec.start();
+
+  // Grabar 6.35s mientras el siguiente ciclo inicia a los 6.0s (350ms de traslape acústico para no cortar sílabas)
   setTimeout(() => {
-    if (rec.state === 'recording') rec.stop();
-  }, 4500);
+    if (rec.state === 'recording') {
+      try { rec.stop(); } catch (_) {}
+    }
+  }, 6350);
 }
 
 async function sendChunkToServer(audioBlob, currentSeconds) {
@@ -424,10 +450,7 @@ function startVuMeter() {
     const avg = sum / dataArray.length;
     const pct = Math.min(100, Math.round((avg / 128) * 100));
     vuBar.style.width = pct + '%';
-
-    if (pct > currentChunkMaxVolume) {
-      currentChunkMaxVolume = pct;
-    }
+    latestInstantVolume = pct;
 
     // Auto-calibración durante primeros 6 segundos
     if (lectureSeconds <= 6 && pct > 20 && !isAnchorCalibrated) {
