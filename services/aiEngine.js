@@ -248,7 +248,15 @@ function normalizeSpokenTerms(text) {
     .replace(/\bCAPE\b/g, 'CAPM')
     .replace(/\bel cape\b/gi, 'el CAPM')
     .replace(/\bbajo el cape\b/gi, 'bajo el CAPM')
-    .replace(/\bC\.?A\.?P\.?M\.?\b/gi, 'CAPM');
+    .replace(/\bC\.?A\.?P\.?M\.?\b/gi, 'CAPM')
+    .replace(/\bel guac\b/gi, 'el WACC')
+    .replace(/\bel wac\b/gi, 'el WACC')
+    .replace(/\bel wak\b/gi, 'el WACC')
+    .replace(/\bwacc\b/gi, 'WACC')
+    .replace(/\buna tira alta\b/gi, 'una TIR alta')
+    .replace(/\buna tir alta\b/gi, 'una TIR alta')
+    .replace(/\bel ban\b/gi, 'el VAN')
+    .replace(/\bevaluamos el van\b/gi, 'evaluamos el VAN');
 }
 
 function detectHeuristicCategory(text) {

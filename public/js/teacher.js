@@ -353,13 +353,21 @@ function stopRecording() {
   }
 
   if (activeRecorder && activeRecorder.state === 'recording') {
-    try { activeRecorder.stop(); } catch (_) {}
-  }
-  activeRecorder = null;
-
-  if (mediaStream) {
-    mediaStream.getTracks().forEach(t => t.stop());
-    mediaStream = null;
+    const recToFinish = activeRecorder;
+    activeRecorder = null;
+    recToFinish.addEventListener('stop', () => {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+        mediaStream = null;
+      }
+    }, { once: true });
+    try { recToFinish.stop(); } catch (_) {}
+  } else {
+    activeRecorder = null;
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
   }
   if (audioContext && audioContext.state !== 'closed') {
     audioContext.close();

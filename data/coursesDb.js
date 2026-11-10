@@ -93,8 +93,8 @@ export const COURSES_DB = {
     name: 'Ingeniería Financiera y Portafolios',
     instructor: 'Prof. Bruno Castro',
     badgeColor: '#059669',
-    description: 'Valorización de activos (CAPM), teoría de portafolios de Markowitz, estructura de tasas y derivados financieros.',
-    glossary: 'CAPM, beta, riesgo sistemático, riesgo idiosincrático, diversificación, varianza del portafolio, correlación, retorno esperado, tasa libre de riesgo, prima por riesgo de mercado, frontera eficiente, swaps de tasa de interés, FRAs, convenciones 30/360, Act/365.',
+    description: 'Valorización de activos (CAPM), teoría de portafolios de Markowitz, WACC, evaluación de proyectos (VAN y TIR) y derivados.',
+    glossary: 'CAPM, WACC, TIR, VAN, beta, riesgo sistemático, riesgo idiosincrático, diversificación, varianza del portafolio, correlación, retorno esperado, retorno exigido, tasa libre de riesgo, prima por riesgo de mercado, flujos de caja libres, swaps, FRAs.',
     historicalClasses: [
       {
         id: 'HIST-F1',
@@ -110,20 +110,20 @@ export const COURSES_DB = {
       {
         id: 'HIST-F2',
         classNumber: 2,
-        title: 'Clase 2: Estructura Temporal de Tasas, FRAs y Swaps',
-        summary: 'Curva de tasas spot y bonos cupón cero. Valoración de un Forward Rate Agreement (FRA): fijación hoy de la tasa de interés para un préstamo futuro. Relación de no arbitraje: (1 + r2)^T2 = (1 + r1)^T1 * (1 + f)^(T2 - T1). Swaps de tasa de interés (IRS): intercambio periódico de flujos de tasa fija por tasa flotante sobre un nocional sin intercambiar el principal.',
+        title: 'Clase 2: Valorización de Empresas (WACC) y Evaluación de Proyectos (VAN vs TIR)',
+        summary: 'El WACC (Weighted Average Cost of Capital) representa el costo promedio ponderado de las fuentes de financiamiento (deuda y patrimonio) y se utiliza para descontar los flujos de caja libres de la firma siempre que sea consistente con su nivel de riesgo. En evaluación de proyectos, una TIR alta no implica necesariamente mayor creación de valor; el criterio correcto para medir creación de valor es el VAN (Valor Actual Neto). Diferencia fundamental entre retorno esperado y retorno exigido.',
         keyFormulas: [
-          '(1 + r_{T_2})^{T_2} = (1 + r_{T_1})^{T_1} \\cdot (1 + f(0; T_1, T_2))^{T_2 - T_1}',
-          '\\text{Payoff FRA} = \\frac{N \\cdot (L - R_K) \\cdot \\frac{d}{360}}{1 + L \\cdot \\frac{d}{360}}'
+          '\\text{WACC} = \\frac{E}{V} R_e + \\frac{D}{V} R_d (1 - t_c)',
+          '\\text{VAN} = -I_0 + \\sum_{t=1}^n \\frac{FCF_t}{(1 + \\text{WACC})^t}'
         ]
       }
     ],
     materials: [
       {
         id: 'MAT-F1',
-        title: 'Apunte 1 — Valorización de Activos (CAPM), Portafolios y Derivados',
+        title: 'Apunte 1 — CAPM, Portafolios, WACC y Criterios VAN vs. TIR',
         pages: 'p. 1–15',
-        content: 'Modelo CAPM: el retorno exigido de un activo depende de la tasa libre de riesgo (Rf), su beta y la prima por riesgo de mercado (E(Rm) - Rf). La beta mide únicamente el riesgo sistemático; el riesgo idiosincrático se elimina mediante diversificación al combinar activos con correlación menor que 1.'
+        content: 'Modelo CAPM: el retorno exigido de un activo depende de la tasa libre de riesgo (Rf), su beta y la prima por riesgo de mercado (E(Rm) - Rf). La beta mide únicamente el riesgo sistemático; el riesgo idiosincrático se reduce mediante diversificación al combinar activos con correlación menor que 1. Valorización de empresas: el WACC descuenta flujos de caja libres de la firma. Criterio de inversión: una TIR alta no garantiza mayor creación de valor; para eso se evalúa el VAN. No confundir retorno esperado (estimación estadística) con retorno exigido (compensación mínima por riesgo sistemático según CAPM).'
       }
     ]
   }
