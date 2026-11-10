@@ -181,15 +181,10 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
 
     const audioBuffer = fs.readFileSync(tempConverted);
 
-    // Obtener las últimas 2 frases para darle continuidad sintáctica a Whisper
-    const recentContext = liveSession.entries.slice(-2).map(e => e.text).join(' ');
-
-    // 1. Transcribir con Groq Whisper Large v3 Turbo inyectando el glosario del curso y continuidad
+    // 1. Transcribir con Groq Whisper Large v3 Turbo (sin prompt inyectado para evitar eco de glosario)
     const transcribedText = await transcribeLiveAudio(
       audioBuffer, 
-      'audio/mp3', 
-      currentCourse.glossary,
-      recentContext
+      'audio/mp3'
     );
 
     // Limpiar temporales
@@ -218,7 +213,8 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
     const labeled = await labelAndCleanSegment({
       text: transcribedText,
       previousSegments: liveSession.entries,
-      courseName: currentCourse.name
+      courseName: currentCourse.name,
+      courseGlossary: currentCourse.glossary
     });
 
     const isTeacher = isPrimarySpeaker === 'true' && labeled.speakerRole === 'profesor';

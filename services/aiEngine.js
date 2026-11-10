@@ -20,26 +20,31 @@ const WHISPER_SILENCE_HALLUCINATIONS = new Set([
   'gracias', 'gracias.', 'muchas gracias', 'muchas gracias.',
   'bien', 'bien.', 'bueno', 'bueno.', 'sí', 'sí.', 'no', 'no.',
   'y', 'y.', 'o', 'eh', 'ah', 'mm', 'amén', 'amén.', 'subtítulos',
-  'hola', 'hola.', 'adiós', 'hasta luego', '...', '.'
+  'hola', 'hola.', 'adiós', 'hasta luego', '...', '.',
+  'glosario técnico', 'glosario técnico.', 'clase universitaria en español', 'clase universitaria en español.'
 ]);
 
 /**
- * Filtra alucinaciones de silencio de Whisper
+ * Filtra alucinaciones de silencio o de ruido blanco de Whisper
  */
 function cleanWhisperOutput(rawText) {
   if (!rawText) return '';
   let text = rawText.replace(/^["'«“]|["'»”]$/g, '').trim();
   const low = text.toLowerCase();
 
-  // Frases típicas de YouTube / Amara inyectadas por Whisper en silencios
+  // Frases típicas de YouTube / Amara / alucinaciones de ruido de Whisper
   if (
     low.includes('subtítulos por') ||
     low.includes('subtitulado por') ||
+    low.includes('subtítulos realizados') ||
     low.includes('amara.org') ||
     low.includes('gracias por ver') ||
     low.includes('suscríbete') ||
     low.includes('suscrib') ||
     low.includes('dale like') ||
+    low.includes('glosario técnico') ||
+    low.includes('contexto inmediato anterior') ||
+    low.includes('sabes qué es lo más difícil') ||
     (low.includes('hasta la próxima') && text.length < 35)
   ) {
     return '';
@@ -61,8 +66,11 @@ function cleanWhisperOutput(rawText) {
 
 /**
  * 1. Transcripción de Audio en Vivo (Buckets 1 y 2: whisper-large-v3-turbo -> whisper-large-v3)
+ * IMPORTANTE: NO se envía el parámetro `prompt` a Whisper porque el decodificador acústico de Whisper
+ * trata el `prompt` como texto previo hablado y ante pausas o ruido de ambiente alucina repitiendo
+ * "Glosario técnico..." o inventando frases. La normalización de siglas se hace en el Micro-Labeler LLM.
  */
-export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', glossaryPrompt = '', recentTextContext = '') {
+export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
   if (!GROQ_API_KEY && !GEMINI_API_KEY) {
     throw new Error('No hay claves de API configuradas para transcripción.');
   }
@@ -73,12 +81,6 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', g
       : mimeType.includes('wav') ? 'wav'
       : 'webm';
 
-    // El prompt de Whisper guía la ortografía de siglas (IS-LM, FRAs, Bayes) y continúa la oración anterior
-    const promptParts = ['Clase universitaria en español.'];
-    if (glossaryPrompt) promptParts.push(`Glosario técnico: ${glossaryPrompt}.`);
-    if (recentTextContext) promptParts.push(`Contexto inmediato anterior: "${recentTextContext.slice(-160)}"`);
-    const finalWhisperPrompt = promptParts.join(' ').slice(0, 800);
-
     const whisperModels = ['whisper-large-v3-turbo', 'whisper-large-v3'];
 
     for (const modelName of whisperModels) {
@@ -87,9 +89,8 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', g
         formData.append('file', new Blob([audioBuffer], { type: mimeType }), `live_chunk.${ext}`);
         formData.append('model', modelName);
         formData.append('language', 'es');
-        formData.append('response_format', 'json');
+        formData.append('response_format', 'verbose_json');
         formData.append('temperature', '0');
-        formData.append('prompt', finalWhisperPrompt);
 
         const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
@@ -104,6 +105,24 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', g
 
         if (res.ok) {
           const data = await res.json();
+
+          // Filtrar segmentos usando las métricas acústicas reales de Whisper (no_speech_prob y avg_logprob)
+          if (Array.isArray(data.segments) && data.segments.length > 0) {
+            const validSegments = data.segments.filter(seg => {
+              const noSpeech = typeof seg.no_speech_prob === 'number' ? seg.no_speech_prob : 0;
+              const avgLogProb = typeof seg.avg_logprob === 'number' ? seg.avg_logprob : 0;
+              const compRatio = typeof seg.compression_ratio === 'number' ? seg.compression_ratio : 1;
+              // Si Whisper detecta alta probabilidad de no-voz (>0.55) o muy baja confianza acústica (<-0.95), es ruido/alucinación
+              if (noSpeech > 0.55) return false;
+              if (avgLogProb < -0.95) return false;
+              if (compRatio > 2.4) return false;
+              return true;
+            });
+
+            const joinedText = validSegments.map(s => s.text || '').join(' ').trim();
+            return cleanWhisperOutput(joinedText);
+          }
+
           return cleanWhisperOutput(data.text);
         }
       } catch (err) {
@@ -150,7 +169,7 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3', g
  * 2. Micro-Labeler Semántico (Bucket 3 Exclusivo: openai/gpt-oss-20b + Heurística Instantánea)
  * NUNCA toca la cuota de `qwen/qwen3.8-27b` ni de `openai/gpt-oss-120b` que son exclusivos del Chatbot.
  */
-export async function labelAndCleanSegment({ text, previousSegments = [], courseName = 'Clase' }) {
+export async function labelAndCleanSegment({ text, previousSegments = [], courseName = 'Clase', courseGlossary = '' }) {
   if (!text || !text.trim()) {
     return {
       speakerRole: 'profesor',
@@ -176,6 +195,7 @@ export async function labelAndCleanSegment({ text, previousSegments = [], course
   const prevContext = previousSegments.slice(-2).map(s => `[${s.timestamp}] ${s.text}`).join('\n');
 
   const systemInstruction = `Eres el analizador semántico en tiempo real de una clase universitaria ("${courseName}").
+Términos frecuentes del curso (úsalos SOLO para corregir ortografía si el profesor los pronuncia fonéticamente, NUNCA los inventes si no los dijo): ${courseGlossary || 'IS-LM, Bayes, tasas'}.
 Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
 {
   "speakerRole": "profesor" | "interrupcion",

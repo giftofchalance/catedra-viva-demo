@@ -278,8 +278,6 @@ async function startRecording() {
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        channelCount: 1,
-        sampleRate: 16000,
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
@@ -288,6 +286,9 @@ async function startRecording() {
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     audioContext = new AudioContextClass();
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
     const sourceNode = audioContext.createMediaStreamSource(mediaStream);
     analyserNode = audioContext.createAnalyser();
     analyserNode.fftSize = 256;
@@ -339,11 +340,24 @@ function stopRecording() {
   vuBar.style.width = '0%';
 }
 
+function getBestAudioMimeType() {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus'
+  ];
+  for (const t of types) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return '';
+}
+
 function recordSingleChunk() {
   if (!isRecording || !mediaStream) return;
 
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/mp4';
-  const rec = new MediaRecorder(mediaStream, { mimeType: mime });
+  const mime = getBestAudioMimeType();
+  const rec = mime ? new MediaRecorder(mediaStream, { mimeType: mime }) : new MediaRecorder(mediaStream);
   const chunks = [];
   const chunkStartSecond = lectureSeconds;
   currentChunkMaxVolume = 0; // Reiniciar pico de volumen para este chunk
@@ -355,12 +369,12 @@ function recordSingleChunk() {
   rec.onstop = () => {
     const peakVol = currentChunkMaxVolume;
     if (chunks.length > 0) {
-      // Noise Gate Acústico: si el volumen máximo del bloque fue < 6% (silencio), no gastar request ni alucinar "Gracias."
-      if (peakVol < 6) {
-        console.log(`[Noise Gate] Silencio detectado en seg ${chunkStartSecond} (pico ${peakVol}%). Omitiendo envío a Whisper.`);
+      // Noise Gate Acústico: solo omitir si hubo silencio digital absoluto (peakVol < 2%)
+      if (peakVol < 2) {
+        console.log(`[Noise Gate] Silencio absoluto en seg ${chunkStartSecond} (pico ${peakVol}%). Omitiendo envío.`);
         return;
       }
-      const blob = new Blob(chunks, { type: mime });
+      const blob = new Blob(chunks, { type: mime || 'audio/webm' });
       // Encolar secuencialmente para garantizar que el chunk N siempre llegue antes que el N+1
       uploadQueue = uploadQueue
         .then(() => sendChunkToServer(blob, chunkStartSecond))
