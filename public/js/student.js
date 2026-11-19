@@ -7,6 +7,8 @@ let currentSettings = { chatState: 'active', allowComplement: true, hideDigressi
 let currentEntries = [];
 let fontScale = 1;
 let latestStudentCapsule = null;
+let activeTranscriptFilter = 'all'; // 'all' | 'importancia' | 'formula'
+let lastKnownChatState = 'active';
 
 // DOM Elements
 const studentCourseTitle = document.getElementById('studentCourseTitle');
@@ -20,9 +22,13 @@ const bridgeDetails = document.getElementById('bridgeDetails');
 const bridgeSummaryText = document.getElementById('bridgeSummaryText');
 const bridgeBody = document.getElementById('bridgeBody');
 const checkFilterDigressions = document.getElementById('checkFilterDigressions');
+const transcriptFilterControl = document.getElementById('transcriptFilterControl');
 const studentFeed = document.getElementById('studentFeed');
 const studentEmptyState = document.getElementById('studentEmptyState');
 const btnLostSignal = document.getElementById('btnLostSignal');
+const btnPulseFast = document.getElementById('btnPulseFast');
+const btnPulseExample = document.getElementById('btnPulseExample');
+const modeToastBanner = document.getElementById('modeToastBanner');
 const whiteboardBanner = document.getElementById('whiteboardBanner');
 const quickPromptChips = document.getElementById('quickPromptChips');
 const chatMessages = document.getElementById('chatMessages');
@@ -91,25 +97,50 @@ function bindUIEvents() {
 
   checkFilterDigressions.addEventListener('change', renderTranscript);
 
-  btnLostSignal.addEventListener('click', async () => {
+  if (transcriptFilterControl) {
+    transcriptFilterControl.querySelectorAll('[data-filter]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTranscriptFilter = btn.getAttribute('data-filter');
+        transcriptFilterControl.querySelectorAll('[data-filter]').forEach(b => {
+          b.style.borderColor = 'var(--border-default)';
+        });
+        btn.style.borderColor = 'var(--primary)';
+        renderTranscript();
+      });
+    });
+  }
+
+  async function sendStudentPulse(type, btnEl, defaultText, sentText) {
     const lastEntry = currentEntries[currentEntries.length - 1];
     const timestamp = lastEntry ? lastEntry.timestamp : '00:00';
-    btnLostSignal.disabled = true;
-    btnLostSignal.textContent = '✓ Aviso enviado anónimamente al Radar';
-
+    btnEl.disabled = true;
+    btnEl.textContent = sentText;
     try {
-      await fetch('/api/live/lost', {
+      await fetch('/api/live/pulse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timestamp })
+        body: JSON.stringify({ type, timestamp })
       });
     } catch (_) {}
-
     setTimeout(() => {
-      btnLostSignal.disabled = false;
-      btnLostSignal.textContent = '⚡ Me perdí en este minuto (Avisar anónimamente)';
-    }, 3500);
-  });
+      btnEl.disabled = false;
+      btnEl.textContent = defaultText;
+    }, 3000);
+  }
+
+  btnLostSignal.addEventListener('click', () =>
+    sendStudentPulse('lost', btnLostSignal, '⚡ Me perdí', '✓ Aviso enviado')
+  );
+  if (btnPulseFast) {
+    btnPulseFast.addEventListener('click', () =>
+      sendStudentPulse('fast', btnPulseFast, '🐢 Muy rápido', '✓ Ritmo avisado')
+    );
+  }
+  if (btnPulseExample) {
+    btnPulseExample.addEventListener('click', () =>
+      sendStudentPulse('example', btnPulseExample, '💡 Pedir ejemplo', '✓ Pedido enviado')
+    );
+  }
 
   btnFontUp.addEventListener('click', () => {
     fontScale = Math.min(1.25, fontScale + 0.08);
@@ -211,6 +242,21 @@ function updateConnectionAndModeUI(isLive, chatState) {
     whiteboardBanner.style.display = 'none';
     studentChatInput.placeholder = 'Escribe tu duda rápida sobre la clase...';
   }
+
+  // Toast suave si el profesor cambió de modo durante la sesión
+  if (modeToastBanner && lastKnownChatState !== chatState) {
+    if (chatState === 'full_ia') {
+      modeToastBanner.textContent = '🟣 Clase finalizada / Full IA habilitado — ya puedes pedir desarrollos y demostraciones completas.';
+      modeToastBanner.style.display = 'block';
+    } else if (chatState === 'active' && lastKnownChatState === 'paused') {
+      modeToastBanner.textContent = '🟢 El profesor reactivó el chat en Modo Seguimiento.';
+      modeToastBanner.style.display = 'block';
+      setTimeout(() => { modeToastBanner.style.display = 'none'; }, 4000);
+    } else {
+      modeToastBanner.style.display = 'none';
+    }
+    lastKnownChatState = chatState;
+  }
 }
 
 function renderBridge(course) {
@@ -251,12 +297,20 @@ function renderQuickChips(courseId) {
 
 function renderTranscript() {
   const hideDig = checkFilterDigressions.checked;
-  const filtered = currentEntries.filter(e => !(hideDig && e.category === 'digresion'));
+  const filtered = currentEntries.filter(e => {
+    if (hideDig && e.category === 'digresion') return false;
+    if (activeTranscriptFilter !== 'all' && e.category !== activeTranscriptFilter) return false;
+    return true;
+  });
 
   if (filtered.length === 0) {
     studentFeed.innerHTML = '';
-    studentFeed.appendChild(studentEmptyState);
-    studentEmptyState.style.display = 'block';
+    if (currentEntries.length > 0) {
+      studentFeed.innerHTML = `<div style="text-align:center; padding: 2.5rem 1rem; color: var(--text-muted); font-size:0.82rem;">No hay fragmentos marcados con este filtro todavía. Pulsa <strong>Todo</strong> para ver toda la clase.</div>`;
+    } else {
+      studentFeed.appendChild(studentEmptyState);
+      studentEmptyState.style.display = 'block';
+    }
     return;
   }
 
@@ -275,7 +329,7 @@ function renderTranscript() {
     else if (entry.category === 'digresion') { tagClass = 'tag-digression'; tagText = 'Digresión'; }
 
     const slideBadge = entry.slideRef
-      ? `<span class="tag-badge tag-slide">📑 Lám. ${entry.slideRef.number}</span>`
+      ? `<button type="button" class="tag-badge tag-slide slide-open-btn" data-slide="${entry.slideRef.number}" style="cursor:pointer;">📑 Lám. ${entry.slideRef.number}</button>`
       : '';
 
     card.innerHTML = `
@@ -291,6 +345,14 @@ function renderTranscript() {
       </div>
       <div style="font-size: 0.85rem; line-height: 1.45;">${entry.text}</div>
     `;
+
+    const slideBtn = card.querySelector('.slide-open-btn');
+    if (slideBtn) {
+      slideBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        openCapsuleAtSlide(parseInt(slideBtn.getAttribute('data-slide'), 10));
+      });
+    }
 
     card.addEventListener('click', () => {
       studentChatInput.value = `En el minuto [${entry.timestamp}], el profe dijo: "${entry.text}". ¿Qué significa esto brevemente?`;
@@ -425,7 +487,12 @@ function appendAssistantMessage(answerText, complementText = null, options = {})
   if (voicePrompt && questionType !== 'off_topic') {
     voicePromptHtml = `
       <div class="voice-prompt-box">
-        <div class="voice-prompt-label">🙋‍♂️ Para levantar la mano y preguntar al profesor en voz alta:</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+          <div class="voice-prompt-label" style="margin-bottom:0;">🙋‍♂️ Para levantar la mano o pegar en Zoom/Meet:</div>
+          <button type="button" class="btn btn-outline btn-xs btn-copy-voice" style="padding:2px 7px; font-size:0.68rem;">
+            📋 Copiar para Zoom
+          </button>
+        </div>
         <div class="voice-prompt-text">"${voicePrompt}"</div>
       </div>
     `;
@@ -482,8 +549,26 @@ function appendAssistantMessage(answerText, complementText = null, options = {})
   `;
 
   row.querySelectorAll('.cite-chip').forEach(btn => {
-    btn.addEventListener('click', () => highlightTranscriptSource(btn.getAttribute('data-target')));
+    btn.addEventListener('click', () => {
+      const target = btn.getAttribute('data-target');
+      if (target && target.startsWith('slide-')) {
+        openCapsuleAtSlide(parseInt(target.replace('slide-', ''), 10));
+      } else {
+        highlightTranscriptSource(target);
+      }
+    });
   });
+
+  const copyVoiceBtn = row.querySelector('.btn-copy-voice');
+  if (copyVoiceBtn && voicePrompt) {
+    copyVoiceBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(voicePrompt);
+        copyVoiceBtn.textContent = '✓ Copiada para Zoom/Meet';
+        setTimeout(() => { copyVoiceBtn.textContent = '📋 Copiar para Zoom'; }, 2000);
+      } catch (_) {}
+    });
+  }
 
   const forwardBtn = row.querySelector('.btn-forward-teacher');
   if (forwardBtn) {
@@ -536,7 +621,7 @@ function formatAnswerWithCitations(text) {
   });
 
   html = html.replace(/\[SLIDE-(\d+)\]/g, (match, p1) => {
-    return `<button type="button" class="cite-chip" data-target="bridgeDetails">📑 Lámina ${p1}</button>`;
+    return `<button type="button" class="cite-chip" data-target="slide-${p1}">📑 Lámina ${p1}</button>`;
   });
 
   html = html.replace(/\[HIST-([A-Z0-9]+)\]/g, () => {
@@ -562,15 +647,48 @@ function highlightTranscriptSource(targetId) {
 
 function formatMarkdownSimple(text) {
   if (!text) return '';
-  let str = text;
-  str = str.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-  str = str.replace(/\*(.*?)\*/g, '<em>$1</em>');
-  str = str.replace(/\n\n/g, '<br><br>');
-  str = str.replace(/\n/g, '<br>');
-  return str;
+  // Proteger bloques de LaTeX ($...$ y $$...$$) para no romper asteriscos/subíndices internos
+  const mathTokens = [];
+  let safe = text.replace(/\$\$[\s\S]*?\$\$|\$[^\n$]+\$/g, (m) => {
+    const idx = mathTokens.length;
+    mathTokens.push(m);
+    return `@@MATH_${idx}@@`;
+  });
+
+  safe = safe
+    .replace(/^---+\s*$/gm, '<hr style="border:none; border-top:1px solid var(--border-subtle); margin:10px 0;">')
+    .replace(/^###\s+(.*)$/gm, '<div style="font-size:0.95rem; font-weight:700; color:#F8FAFC; margin:10px 0 4px 0;">$1</div>')
+    .replace(/^##\s+(.*)$/gm, '<div style="font-size:1.02rem; font-weight:700; color:#93C5FD; margin:12px 0 6px 0;">$1</div>')
+    .replace(/^\s*[\*\-]\s+(.*)$/gm, '<div style="padding-left:12px; margin:2px 0;">• $1</div>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^\*])\*([^\n\*]+?)\*/g, '$1<em>$2</em>')
+    .replace(/\n\n+/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+
+  mathTokens.forEach((orig, idx) => {
+    safe = safe.replace(`@@MATH_${idx}@@`, orig);
+  });
+
+  return safe;
 }
 
-function renderStudentCapsuleModal(capsule) {
+async function openCapsuleAtSlide(slideNumber) {
+  const res = await fetch('/api/live/capsule');
+  const data = await res.json();
+  if (data.capsule) {
+    latestStudentCapsule = data.capsule;
+    renderStudentCapsuleModal(data.capsule, slideNumber);
+    studentCapsuleModal.classList.add('active');
+    const targetCard = document.getElementById(`capsule-slide-${slideNumber}`);
+    if (targetCard) {
+      setTimeout(() => {
+        targetCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 80);
+    }
+  }
+}
+
+function renderStudentCapsuleModal(capsule, focusSlideNumber = null) {
   let html = '';
 
   if (capsule.teacherEmphasis && capsule.teacherEmphasis.length > 0) {
@@ -585,9 +703,10 @@ function renderStudentCapsuleModal(capsule) {
   }
 
   (capsule.slideBlocks || []).forEach(sb => {
-    if (sb.spokenEntries.length === 0 && capsule.totalEntries > 0) return;
+    const isFocused = focusSlideNumber === sb.slideNumber;
+    if (!isFocused && sb.spokenEntries.length === 0 && capsule.totalEntries > 0) return;
     html += `
-      <div style="background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
+      <div id="capsule-slide-${sb.slideNumber}" style="background: var(--surface-2); border: 1px solid ${isFocused ? '#8B5CF6' : 'var(--border-subtle)'}; box-shadow: ${isFocused ? '0 0 0 2px rgba(139,92,246,0.28)' : 'none'}; border-radius: var(--radius-sm); padding: 10px 12px;">
         <div style="font-weight:700; color:#DDD6FE; margin-bottom:4px;">📑 Lámina ${sb.slideNumber}: ${sb.title}</div>
         <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:6px; border-left:2px solid var(--border-default); padding-left:8px;">
           ${sb.bulletPoints.map(bp => `• ${bp}`).join('<br>')}

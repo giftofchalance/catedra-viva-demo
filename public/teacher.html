@@ -130,9 +130,14 @@
           </div>
         </div>
 
-        <button id="btnSimulateOneMin" class="btn btn-outline" style="width: 100%; font-size: 0.76rem; padding: 6px 10px;">
-          ⚡ Simular Clase Hablada (Demo)
-        </button>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; width:100%;">
+          <button id="btnSimulateOneMin" class="btn btn-outline" style="font-size: 0.74rem; padding: 6px 6px;">
+            ⚡ Simular Demo
+          </button>
+          <button id="btnEndClassQuick" class="btn btn-purple" style="font-size: 0.74rem; padding: 6px 6px;" title="Detiene el micrófono y pasa la sala a Modo Estudio Full IA">
+            🏁 Terminar Clase
+          </button>
+        </div>
       </section>
 
       <!-- U-Cursos Auto-Sync (Mapeo automático a láminas escuetas) -->
@@ -302,18 +307,22 @@
     </div>
   </div>
 
-  <!-- MODAL 2: APUNTE VIVO FUSIONADO POST-CLASE -->
+  <!-- MODAL 2: APUNTE VIVO FUSIONADO Y PAUTA AUXILIAR -->
   <div id="capsuleModal" class="modal-overlay">
     <div class="modal-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle); flex-wrap:wrap; gap:8px;">
         <div>
-          <h3 style="font-size: 1.05rem;">📘 Apunte Vivo Fusionado (Láminas + Voz + Radar)</h3>
-          <div style="font-size: 0.74rem; color: var(--text-muted);">Une las slides de U-Cursos con lo que realmente explicó el profesor en sala.</div>
+          <h3 style="font-size: 1.05rem;">📘 Cápsula Post-Clase (Apunte Vivo &amp; Pauta Auxiliar)</h3>
+          <div style="font-size: 0.74rem; color: var(--text-muted);">Slides U-Cursos + Voz en sala + Puntos ciegos agrupados del Radar.</div>
         </div>
         <div style="display:flex; gap:6px;">
           <button id="btnDownloadCapsule" class="btn btn-primary btn-xs">📥 Descargar (.md)</button>
           <button id="btnCloseCapsule" class="btn btn-outline btn-xs">Cerrar</button>
         </div>
+      </div>
+      <div class="segmented-control segmented-2" id="capsuleTabsControl" style="margin-bottom:12px;">
+        <button type="button" class="seg-btn active-source" data-tab="apunte">📘 Apunte Vivo (Slides + Voz)</button>
+        <button type="button" class="seg-btn" data-tab="pauta">📋 Pauta Automática Auxiliar</button>
       </div>
       <div id="capsuleBody" style="display:flex; flex-direction:column; gap:12px; font-size: 0.85rem;"></div>
     </div>
@@ -321,35 +330,55 @@
 
   <!-- MODAL 3: PRIVACIDAD EXPLÍCITA Y TOKENOMICS GPU -->
   <div id="privacyModal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 600px;">
+    <div class="modal-card" style="max-width: 660px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
-        <h3 style="font-size: 1rem;">🛡️ Privacidad, Ética y Arquitectura de Costos (GPU U)</h3>
+        <h3 style="font-size: 1rem;">🛡️ Privacidad, Ética y Costos (GPUs Dedicadas Facultad)</h3>
         <button id="btnClosePrivacy" class="btn btn-outline btn-xs">Cerrar</button>
       </div>
-      <div style="display:flex; flex-direction:column; gap:10px; font-size:0.83rem; line-height:1.5;">
+      <div style="display:flex; flex-direction:column; gap:10px; font-size:0.82rem; line-height:1.5;">
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--success);">
-          <strong>1. Audio 100% Efímero (Zero-Retention Biometrics)</strong>
+          <strong>1. Audio 100% Efímero (0s Guardado — Cero Biometría)</strong>
           <p style="color: var(--text-muted); margin-top: 3px;">
-            Ningún fragmento de voz del profesor ni del aula se almacena en disco o base de datos. Cada chunk se borra inmediatamente tras transcribir (<span id="modalDeletedChunks" class="tabular-nums" style="color:#6EE7B7; font-weight:700;">0</span> archivos destruidos en esta sesión).
+            Cumpliendo principios de EU AI Act y Ley 21.719, la voz NO se graba: cada fragmento se transcribe en &lt;1s y se destruye del servidor (<span id="modalDeletedChunks" class="tabular-nums" style="color:#6EE7B7; font-weight:700;">0</span> chunks borrados en esta sesión).
           </p>
         </div>
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary);">
-          <strong>2. Privacidad en 2 Capas (Cero Inhibición al Preguntar)</strong>
+          <strong>2. Privacidad en 2 Capas (Anonimato del Estudiante)</strong>
           <p style="color: var(--text-muted); margin-top: 3px;">
-            Las dudas estudiantiles y avisos de "Me perdí" no usan cuentas ni identificadores personales. El profesor y el auxiliar reciben exclusivamente clusters agregados anónimos (Capa 2).
+            Sin cuentas ni correos. Profesores y auxiliares solo reciben tópicos agregados en Capa 2 (ej. "4 alumnos con duda en VAN vs TIR"), erradicando el efecto inhibidor por vergüenza.
           </p>
         </div>
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--purple);">
-          <strong>3. Tokenomics sin Sesgo &amp; Despliegue GPU Dedicado (vLLM)</strong>
-          <p style="color: var(--text-muted); margin-top: 3px;">
-            • <strong>Anti-sesgo epistémico:</strong> El caché respeta guardia de negación/operadores e invalidación temporal por minuto.<br>
-            • <strong>Prefix KV-Cache (92% compartido):</strong> En una sala de 80 alumnos el prefijo es idéntico. Con GPUs dedicadas en la Facultad (ej. 2× RTX 4090 o L40S corriendo vLLM de día y NLP/investigación de noche), el costo marginal cae >75% vs API Cloud comercial y ningún dato sale de la red universitaria.
-          </p>
+          <strong>3. Comparativa Tokenomics: GPU Local Facultad (vLLM + Prefix Cache 92%) vs. Cloud</strong>
+          <table style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.75rem; color:var(--text);">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border-default); text-align:left; color:var(--text-muted);">
+                <th style="padding:4px;">Arquitectura (40 salas/día)</th>
+                <th style="padding:4px;">CapEx / OpEx Mensual</th>
+                <th style="padding:4px;">TCO 3 Años</th>
+                <th style="padding:4px;">Soberanía Datos</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border-subtle);">
+                <td style="padding:4px;">API Cloud Comercial</td>
+                <td style="padding:4px;">$0 / ~$1.500–$2.500 USD</td>
+                <td style="padding:4px; color:#FCA5A5;">~$54.000–$90.000 USD</td>
+                <td style="padding:4px;">Sale a servidores EE.UU.</td>
+              </tr>
+              <tr>
+                <td style="padding:4px; font-weight:700; color:#6EE7B7;">2× RTX 4090 / 1× L40S (vLLM)</td>
+                <td style="padding:4px;">~$6.500–$12k / ~$95 USD luz</td>
+                <td style="padding:4px; font-weight:700; color:#6EE7B7;">~$10.000–$15.400 USD (&gt;75% ahorro)</td>
+                <td style="padding:4px; color:#6EE7B7;">100% Red Campus U (Noche = Investigación)</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
   </div>
 
-  <script type="module" src="/js/teacher.js?v=6"></script>
+  <script type="module" src="/js/teacher.js?v=8"></script>
 </body>
 </html>

@@ -226,7 +226,7 @@ REGLAS CRÍTICAS DE CLASIFICACIÓN:
           category: ['concepto_clave', 'formula', 'importancia', 'digresion'].includes(parsed.category)
             ? parsed.category
             : fallback.category,
-          cleanedText: parsed.cleanedText || fallback.cleanedText,
+          cleanedText: normalizeSpokenTerms(parsed.cleanedText || fallback.cleanedText),
           chapterTitle: parsed.chapterTitle || null,
           keyTerms: Array.isArray(parsed.keyTerms) ? parsed.keyTerms : []
         };
@@ -243,6 +243,7 @@ function normalizeSpokenTerms(text) {
   return text
     .replace(/\bISLM\b/gi, 'IS-LM')
     .replace(/\bis lm\b/gi, 'IS-LM')
+    .replace(/\bel E\.?M\.?\b/gi, 'la curva LM')
     .replace(/\bKPM\b/g, 'CAPM')
     .replace(/\bkpm\b/gi, 'CAPM')
     .replace(/\bCAPE\b/g, 'CAPM')
@@ -252,11 +253,14 @@ function normalizeSpokenTerms(text) {
     .replace(/\bel guac\b/gi, 'el WACC')
     .replace(/\bel wac\b/gi, 'el WACC')
     .replace(/\bel wak\b/gi, 'el WACC')
+    .replace(/\bel BAC\b/g, 'el WACC')
+    .replace(/\bel bac representa\b/gi, 'el WACC representa')
     .replace(/\bwacc\b/gi, 'WACC')
     .replace(/\buna tira alta\b/gi, 'una TIR alta')
     .replace(/\buna tir alta\b/gi, 'una TIR alta')
     .replace(/\bel ban\b/gi, 'el VAN')
-    .replace(/\bevaluamos el van\b/gi, 'evaluamos el VAN');
+    .replace(/\bevaluamos el van\b/gi, 'evaluamos el VAN')
+    .replace(/\bsiempre el ban\b/gi, 'siempre el VAN');
 }
 
 function detectHeuristicCategory(text) {
@@ -869,6 +873,7 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
       totalSignals: c.count,
       lostCount: c.lostCount || 0,
       status: c.status || 'open',
+      resolvedAt: c.resolvedAt || null,
       suggestion: c.suggestion,
       sampleQuestions: (c.questions || []).slice(0, 3)
     }));
@@ -915,7 +920,7 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
   } else {
     taFocusPoints.forEach((tp, i) => {
       taMdLines.push(`## ${i + 1}. ${tp.topic} (${tp.totalSignals} señales / ${tp.lostCount} "Me perdí")`);
-      taMdLines.push(`- **Estado en clase:** ${tp.status === 'resolved' ? 'Aclarado en pizarra' : tp.status === 'for_ta' ? 'Marcado para Ayudantía' : 'Pendiente'}`);
+      taMdLines.push(`- **Estado en clase:** ${tp.status === 'resolved' ? 'Aclarado en pizarra' : tp.status === 'auto_resolved' ? `Retomado oralmente por el profesor [${tp.resolvedAt || ''}]` : tp.status === 'for_ta' ? 'Marcado para Ayudantía' : 'Pendiente (revisar en ayudantía)'}`);
       taMdLines.push(`- **Foco sugerido:** ${tp.suggestion}`);
       if (tp.sampleQuestions.length > 0) {
         taMdLines.push(`- **Dudas reales anónimas de los estudiantes:**`);

@@ -3,109 +3,169 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cátedra Viva — Laboratorio de Simulación Dual V2</title>
-  <link rel="stylesheet" href="/css/app.css">
+  <title>Cátedra Viva V3 — Laboratorio Tri-Rol en 1 Pantalla</title>
+  <link rel="stylesheet" href="/css/app.css?v=6">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+  <style>
+    .trirole-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--surface-border);
+      padding: 8px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .trirole-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1.05fr 0.85fr 1.15fr;
+      gap: 12px;
+      padding: 12px 16px;
+      max-width: 1620px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    @media (max-width: 1080px) {
+      .trirole-grid { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
-<body>
+<body class="app-viewport-locked">
 
   <header class="topbar">
     <div class="brand-wrap">
-      <span class="brand-icon">🧪</span>
+      <a href="/" class="brand-icon" style="text-decoration:none; color:inherit;">🧪</a>
       <div>
-        <div class="brand-title">Laboratorio de Simulación Dual V2</div>
-        <div class="brand-subtitle">Emulación simultánea: Transmisor Docente + Alumno con RAG Histórico</div>
+        <div class="brand-title">Laboratorio Tri-Rol (Profe • Auxiliar • Estudiante)</div>
+        <div class="brand-subtitle">Prueba integrada en vivo con audio real, U-Cursos Sync y Tokenomics sin sesgo</div>
       </div>
     </div>
     <div class="topbar-actions">
-      <a href="/profesor" class="btn btn-outline" style="font-size: 0.8rem;">🎙️ Panel Profe</a>
-      <a href="/estudiante" class="btn btn-outline" style="font-size: 0.8rem;">🎓 Estudiante</a>
-      <a href="/" class="btn btn-outline" style="font-size: 0.8rem;">🏠 Portada</a>
+      <button id="simCapsuleBtn" class="btn btn-outline btn-xs">📘 Ver Apunte Vivo &amp; Pauta TA</button>
+      <a href="/profesor" class="btn btn-outline btn-xs">🎙️ Panel Profe</a>
+      <a href="/estudiante" class="btn btn-outline btn-xs">🎓 Estudiante</a>
+      <a href="/" class="btn btn-outline btn-xs">🏠 Portada</a>
     </div>
   </header>
 
-  <!-- Barra de Control de la Simulación -->
-  <div style="background: var(--surface); border-bottom: 1px solid var(--surface-border); padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <label for="simCourseSelect" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted);">Asignatura:</label>
-      <select id="simCourseSelect" class="btn btn-outline" style="font-weight: 600;">
+  <!-- Barra de Control de Simulación -->
+  <div class="trirole-bar">
+    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <select id="simCourseSelect" class="btn btn-outline btn-xs" style="font-weight:600; font-size:0.78rem;">
         <option value="macro">IN4123 — Macroeconomía (IS-LM)</option>
         <option value="probabilidades">IN3401 — Probabilidades y Bayes</option>
-        <option value="finanzas">IN5233 — Finanzas, Tasas y Swaps</option>
+        <option value="finanzas">IN5233 — Finanzas (CAPM, WACC, VAN/TIR)</option>
       </select>
+      <button id="btnStep" class="btn btn-primary btn-xs">▶ Avanzar +7s Audio</button>
+      <button id="btnAuto" class="btn btn-outline btn-xs">⚡ Auto-Stream</button>
+      <button id="btnEndQuick" class="btn btn-purple btn-xs">🏁 Terminar Clase (Full IA)</button>
+      <button id="btnReset" class="btn btn-danger btn-xs">🔄 Reiniciar</button>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 0.6rem;">
-      <button id="btnStep" class="btn btn-primary">▶ Avanzar +5s Audio</button>
-      <button id="btnAuto" class="btn btn-outline">⚡ Auto-Stream (Continuo)</button>
-      <button id="btnReset" class="btn btn-danger">🔄 Reiniciar</button>
-    </div>
-
-    <div style="display: flex; gap: 1.25rem; font-family: var(--font-mono); font-size: 0.85rem;">
-      <div>Tiempo: <strong id="simTime" style="color: #38BDF8;">00:00</strong></div>
-      <div>Ritmo: <strong id="simWpm">0 PPM</strong></div>
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <div class="segmented-control" id="simModeControl" style="min-width: 315px;">
+        <button type="button" class="seg-btn" data-mode="paused" style="white-space:nowrap;">🟡 Pizarra</button>
+        <button type="button" class="seg-btn active" data-mode="active" style="white-space:nowrap;">🟢 Seguimiento</button>
+        <button type="button" class="seg-btn" data-mode="full_ia" style="white-space:nowrap;">🟣 Full IA</button>
+      </div>
+      <div class="tabular-nums" style="font-family:var(--font-mono); font-size:0.8rem; white-space:nowrap;">
+        ⏱ <strong id="simTime" style="color:#38BDF8;">00:00</strong> • <strong id="simWpm">0 PPM</strong>
+      </div>
     </div>
   </div>
 
-  <main class="classroom-grid">
-    <!-- Panel Izquierdo: Lo que capta el micrófono -->
-    <section class="card" style="display: flex; flex-direction: column;">
+  <main class="trirole-grid">
+    <!-- COL 1: PROFESOR -->
+    <section class="card col-panel">
       <div class="card-header">
-        <span class="card-title">🎙️ Dispositivo 1: Transcripción Whisper + Labeler</span>
-        <span id="labelerStatus" style="font-size: 0.72rem; color: #6EE7B7;">Listo</span>
+        <span class="card-title">🎙️ 1. Voz del Profesor &amp; Slides U-Cursos</span>
+        <span id="simPrivacyBadge" class="tabular-nums" style="font-size:0.7rem; color:#6EE7B7;">🛡️ 0 borrados</span>
       </div>
-      <div id="simFeed" class="feed-box" style="flex: 1; max-height: 520px;">
-        <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-          Haz clic en <strong>"Avanzar +5s Audio"</strong> para emitir audio simulado.
+      <div id="simFeed" class="feed-box">
+        <div style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:0.82rem;">
+          Pulsa <strong>"▶ Avanzar +7s Audio"</strong> para transcribir audio real del ramo seleccionado y mapearlo automáticamente a las láminas.
         </div>
       </div>
     </section>
 
-    <!-- Panel Derecho: Chat del alumno -->
-    <section class="card" style="display: flex; flex-direction: column;">
+    <!-- COL 2: AUXILIAR / RADAR -->
+    <section class="card col-panel">
       <div class="card-header">
-        <span class="card-title">📱 Dispositivo 2: Alumno Preguntando (Tutor IA)</span>
-        <span style="font-size: 0.72rem; color: var(--cite-color);">Citas Tocables</span>
+        <span class="card-title">📡 2. Radar Auxiliar</span>
+        <span id="simTokenBadge" class="tabular-nums" style="font-size:0.7rem; color:#C4B5FD; white-space:nowrap;">⚡ 0 tok ahorrados</span>
+      </div>
+      <div id="simClustersBox" class="feed-box" style="gap:8px;">
+        <div style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:0.82rem;">
+          Los clusters de dudas y pulsos ("Me perdí", "Muy rápido") aparecerán aquí agrupados, y se auto-resolverán cuando el profe hable del tema.
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; padding-top:8px; border-top:1px solid var(--border-subtle); flex-shrink:0;">
+        <button id="simPulseLost" class="btn btn-lost btn-xs">⚡ Simular "Me perdí"</button>
+        <button id="simPulseFast" class="btn btn-outline btn-xs" style="color:#93C5FD;">🐢 Simular "Muy rápido"</button>
+      </div>
+    </section>
+
+    <!-- COL 3: ESTUDIANTE -->
+    <section class="card col-panel">
+      <div class="card-header">
+        <span class="card-title">🎓 3. Vista Estudiante (Co-Piloto)</span>
+        <span id="simStudentModePill" class="conn-pill" style="padding:2px 8px; font-size:0.68rem;">🟢 Seguimiento</span>
       </div>
 
-      <div style="margin-bottom: 0.5rem;">
-        <div id="simQuickChips" class="chips-wrap"></div>
-      </div>
+      <div id="simQuickChips" class="chips-wrap" style="margin-bottom:6px; flex-shrink:0;"></div>
 
       <div id="simChatMessages" class="chat-messages">
         <div class="msg-row msg-assistant">
-          <div class="msg-meta">
-            <span style="font-weight: 700; color: #C4B5FD;">TUTOR PEDAGÓGICO</span>
-          </div>
-          <div>Listo para responder según el minuto de audio y el historial previo del curso.</div>
+          <div class="msg-meta"><span style="font-weight:700; color:#6EE7B7;">CO-PILOTO DE AULA</span></div>
+          <div style="font-size:0.84rem;">Haz clic en un chip o escribe una pregunta para probar Modo Seguimiento (2–3 líneas + Voz Alta), Guardia Anti-Sesgo de Caché o Modo Full IA.</div>
         </div>
       </div>
 
       <form id="simChatForm" class="chat-form">
-        <input id="simChatInput" type="text" class="chat-input" placeholder="Haz una pregunta al tutor...">
-        <button type="submit" class="btn btn-primary">Preguntar</button>
+        <input id="simChatInput" type="text" class="chat-input" placeholder="Pregunta como estudiante...">
+        <button type="submit" class="btn btn-primary btn-xs" style="padding:0 12px;">Preguntar ➔</button>
       </form>
     </section>
   </main>
+
+  <!-- Modal Apunte Vivo -->
+  <div id="simCapsuleModal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+        <h3 style="font-size:1rem;">📘 Apunte Vivo Fusionado &amp; Pauta del Auxiliar</h3>
+        <button id="simCloseCapsule" class="btn btn-outline btn-xs">Cerrar</button>
+      </div>
+      <div id="simCapsuleBody" style="display:flex; flex-direction:column; gap:10px; font-size:0.83rem;"></div>
+    </div>
+  </div>
 
   <script>
     let simSec = 0;
     let isAuto = false;
     let autoInterval = null;
-    let currentEntries = [];
 
     const simCourseSelect = document.getElementById('simCourseSelect');
     const btnStep = document.getElementById('btnStep');
     const btnAuto = document.getElementById('btnAuto');
+    const btnEndQuick = document.getElementById('btnEndQuick');
     const btnReset = document.getElementById('btnReset');
     const simTime = document.getElementById('simTime');
     const simWpm = document.getElementById('simWpm');
     const simFeed = document.getElementById('simFeed');
+    const simClustersBox = document.getElementById('simClustersBox');
+    const simPrivacyBadge = document.getElementById('simPrivacyBadge');
+    const simTokenBadge = document.getElementById('simTokenBadge');
+    const simModeControl = document.getElementById('simModeControl');
+    const simStudentModePill = document.getElementById('simStudentModePill');
     const simChatMessages = document.getElementById('simChatMessages');
     const simChatForm = document.getElementById('simChatForm');
     const simChatInput = document.getElementById('simChatInput');
@@ -113,86 +173,129 @@
 
     const PROMPTS = {
       macro: [
-        '¿Qué representa la curva IS y su pendiente?',
-        '¿Cómo calculo el multiplicador keynesiano si c = 0.8?',
-        '¿Qué propone el modelo de Solow sobre acumulación de capital?'
+        { label: 'Curva IS', q: '¿Qué representa la curva IS y por qué tiene pendiente negativa?' },
+        { label: 'Negación IS', q: '¿Por qué la curva IS no tiene pendiente positiva?' },
+        { label: 'Off-topic', q: '¿Quién ganó el mundial?' }
       ],
       probabilidades: [
-        '¿Cuál es la fórmula del Teorema de Bayes?',
-        '¿Qué diferencia hay entre eventos disjuntos e independientes?',
-        'Tengo sensibilidad 90% y especificidad 95%, ¿cómo planteo el árbol de probabilidades?'
+        { label: 'Bayes', q: '¿Cuál es la fórmula del Teorema de Bayes?' },
+        { label: 'Disjuntos', q: '¿Qué diferencia hay entre eventos disjuntos e independientes?' },
+        { label: 'Ejercicio', q: 'Con sensibilidad 95% y prevalencia 1%, ¿cómo planteo Bayes?' }
       ],
       finanzas: [
-        '¿Cuál es la diferencia entre convención 30/360 y Act/365?',
-        '¿Cómo se valoriza un Forward Rate Agreement (FRA)?',
-        '¿Qué es un swap de tasa de interés (IRS)?'
+        { label: 'CAPM y Beta', q: '¿Qué riesgo mide la beta bajo el CAPM y qué pasa con el riesgo idiosincrático?' },
+        { label: 'WACC', q: '¿Para qué se usa el WACC al valorizar una empresa?' },
+        { label: 'VAN vs TIR', q: '¿Por qué una TIR alta no siempre crea más valor que un buen VAN?' }
       ]
     };
 
     async function initSim() {
       await syncState();
       renderChips();
+      setInterval(syncState, 3000);
 
       btnStep.addEventListener('click', stepAudio);
       btnAuto.addEventListener('click', toggleAuto);
       btnReset.addEventListener('click', resetSim);
-      simChatForm.addEventListener('submit', handleSimChat);
+      btnEndQuick.addEventListener('click', async () => {
+        if (isAuto) toggleAuto();
+        await fetch('/api/teacher/close-class', { method: 'POST' });
+        await syncState();
+        openSimCapsule();
+      });
+
+      simModeControl.querySelectorAll('.seg-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const mode = btn.getAttribute('data-mode');
+          await fetch('/api/teacher/settings', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatState: mode })
+          });
+          syncState();
+        });
+      });
+
+      document.getElementById('simPulseLost').addEventListener('click', async () => {
+        await fetch('/api/live/pulse', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'lost', timestamp: formatSec(simSec) })
+        });
+        syncState();
+      });
+
+      document.getElementById('simPulseFast').addEventListener('click', async () => {
+        await fetch('/api/live/pulse', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'fast', timestamp: formatSec(simSec) })
+        });
+        syncState();
+      });
+
+      document.getElementById('simCapsuleBtn').addEventListener('click', openSimCapsule);
+      document.getElementById('simCloseCapsule').addEventListener('click', () => {
+        document.getElementById('simCapsuleModal').classList.remove('active');
+      });
+
+      simChatForm.addEventListener('submit', (e) => handleSimChat(e));
       simCourseSelect.addEventListener('change', async (e) => {
         await fetch('/api/courses/select', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ courseId: e.target.value })
         });
-        resetSim();
+        simSec = 0;
+        simTime.textContent = '00:00';
         renderChips();
+        syncState();
       });
     }
 
     function renderChips() {
       simQuickChips.innerHTML = '';
-      const list = PROMPTS[simCourseSelect.value] || PROMPTS['macro'];
-      list.forEach(text => {
+      const list = PROMPTS[simCourseSelect.value] || PROMPTS.macro;
+      list.forEach(item => {
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = 'chip-btn';
-        chip.textContent = text.substring(0, 32) + '...';
+        chip.textContent = item.label;
         chip.addEventListener('click', () => {
-          simChatInput.value = text;
-          handleSimChat(new Event('submit'));
+          simChatInput.value = item.q;
+          handleSimChat(null, item.q, false);
         });
         simQuickChips.appendChild(chip);
       });
     }
 
     async function stepAudio() {
+      btnStep.disabled = true;
       try {
         const res = await fetch('/api/simulator/step-chunk', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ startSecond: simSec, durationSeconds: 5 })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startSecond: simSec, durationSeconds: 7 })
         });
         const data = await res.json();
-        simSec = data.nextSeconds || (simSec + 5);
+        simSec = data.nextSeconds || (simSec + 7);
         simTime.textContent = formatSec(simSec);
         if (data.pace) simWpm.textContent = `${data.pace.currentWpm} PPM`;
         await syncState();
       } catch (err) {
         console.warn('Error en step:', err);
+      } finally {
+        btnStep.disabled = false;
       }
     }
 
     function toggleAuto() {
       if (isAuto) {
         isAuto = false;
-        btnAuto.textContent = '⚡ Auto-Stream (Continuo)';
+        btnAuto.textContent = '⚡ Auto-Stream';
         btnAuto.classList.remove('btn-danger');
         clearInterval(autoInterval);
       } else {
         isAuto = true;
-        btnAuto.textContent = '⏹ Detener Auto-Stream';
+        btnAuto.textContent = '⏹ Detener';
         btnAuto.classList.add('btn-danger');
         stepAudio();
-        autoInterval = setInterval(stepAudio, 5500);
+        autoInterval = setInterval(stepAudio, 6500);
       }
     }
 
@@ -201,49 +304,81 @@
       await fetch('/api/live/reset', { method: 'POST' });
       simSec = 0;
       simTime.textContent = '00:00';
-      simFeed.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 2rem;">Sesión reiniciada.</div>';
       await syncState();
     }
 
     async function syncState() {
       try {
-        const res = await fetch('/api/live/state');
-        const state = await res.json();
-        currentEntries = state.entries || [];
+        const state = await fetch('/api/live/state').then(r => r.json());
         simCourseSelect.value = state.course.id;
+        simSec = Math.max(simSec, state.elapsedSeconds || 0);
+        simTime.textContent = formatSec(simSec);
+        if (state.pace) simWpm.textContent = `${state.pace.currentWpm} PPM`;
 
-        if (currentEntries.length > 0) {
+        const mode = state.teacherSettings?.chatState || 'active';
+        simModeControl.querySelectorAll('.seg-btn').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+        });
+        simStudentModePill.className = 'conn-pill';
+        if (mode === 'paused') { simStudentModePill.classList.add('warn'); simStudentModePill.textContent = '🟡 Pizarra'; }
+        else if (mode === 'full_ia') { simStudentModePill.classList.add('full-ia'); simStudentModePill.textContent = '🟣 Full IA'; }
+        else { simStudentModePill.textContent = '🟢 Seguimiento'; }
+
+        const tk = state.tokenomics || {};
+        simPrivacyBadge.textContent = `🛡️ ${tk.ephemeralChunksDeleted || 0} borrados`;
+        const savedK = tk.prefixTokensSaved >= 1000 ? `${(tk.prefixTokensSaved / 1000).toFixed(1)}k` : (tk.prefixTokensSaved || 0);
+        simTokenBadge.textContent = `⚡ ${savedK} tok (${tk.cacheHits || 0} hits)`;
+
+        const entries = state.entries || [];
+        if (entries.length > 0) {
           simFeed.innerHTML = '';
-          currentEntries.forEach(entry => {
+          entries.forEach(entry => {
             const card = document.createElement('div');
             card.className = 'feed-item';
             card.id = `entry-${entry.id}`;
+            const slideBadge = entry.slideRef ? `<span class="tag-badge tag-slide">📑 Lám. ${entry.slideRef.number}</span>` : '';
+            const catClass = entry.category === 'importancia' ? 'tag-emphasis' : entry.category === 'formula' ? 'tag-formula' : 'tag-concept';
+            const catLabel = entry.category === 'importancia' ? 'Ojo Control' : entry.category === 'formula' ? 'Fórmula' : entry.category === 'digresion' ? 'Digresión' : 'Concepto';
             card.innerHTML = `
               <div class="feed-meta">
-                <div>
-                  <span class="feed-time">[${entry.timestamp}]</span>
-                  <span style="font-size: 0.72rem; color: var(--text-muted); margin-left: 0.35rem;">${entry.speaker}</span>
-                </div>
-                <span class="tag-badge tag-concept">${entry.category}</span>
+                <div><span class="feed-time">[${entry.timestamp}]</span> <span style="color:var(--text-muted);">${entry.speaker}</span></div>
+                <div style="display:flex; gap:4px;">${slideBadge}<span class="tag-badge ${catClass}">${catLabel}</span></div>
               </div>
-              <div style="font-size: 0.88rem;">${entry.text}</div>
+              <div style="font-size:0.84rem;">${entry.text}</div>
             `;
             simFeed.appendChild(card);
           });
           simFeed.scrollTop = simFeed.scrollHeight;
-
-          if (window.renderMathInElement) {
-            window.renderMathInElement(simFeed, { delimiters: [{ left: '$', right: '$', display: false }] });
-          }
         }
-      } catch (e) {}
+
+        const clusters = state.topicClusters || [];
+        if (clusters.length > 0) {
+          simClustersBox.innerHTML = '';
+          clusters.forEach(c => {
+            const isRes = c.status === 'resolved' || c.status === 'auto_resolved';
+            const card = document.createElement('div');
+            card.className = `cluster-card ${isRes ? 'is-resolved' : c.status === 'for_ta' ? 'is-ta' : ''}`;
+            const statusTxt = c.status === 'auto_resolved'
+              ? `✓ Retomado por profe [${c.resolvedAt || ''}]`
+              : c.status === 'resolved' ? '✓ Aclarado' : c.status === 'for_ta' ? '📌 Ayudantía' : `🔥 ×${c.count} señales`;
+            card.innerHTML = `
+              <div style="display:flex; justify-content:space-between; font-size:0.74rem; font-weight:700;">
+                <span>${c.label}</span>
+                <span style="color:${isRes ? '#6EE7B7' : '#FCD34D'};">${statusTxt}</span>
+              </div>
+              <div style="font-size:0.71rem; color:var(--text-muted);">${c.suggestion}</div>
+            `;
+            simClustersBox.appendChild(card);
+          });
+        }
+      } catch (_) {}
     }
 
-    async function handleSimChat(e) {
-      e.preventDefault();
-      const q = simChatInput.value.trim();
+    async function handleSimChat(e, customQ = null, bypassCache = false) {
+      if (e) e.preventDefault();
+      const q = (customQ || simChatInput.value).trim();
       if (!q) return;
-      simChatInput.value = '';
+      if (!customQ) simChatInput.value = '';
 
       const userRow = document.createElement('div');
       userRow.className = 'msg-row msg-user';
@@ -252,63 +387,82 @@
 
       const loadingRow = document.createElement('div');
       loadingRow.className = 'msg-row msg-assistant';
-      loadingRow.innerHTML = `<span class="dot-pulse"></span> Consultando RAG y aplicando andamiaje...`;
+      loadingRow.innerHTML = `<span class="dot-pulse"></span> Procesando consulta...`;
       simChatMessages.appendChild(loadingRow);
       simChatMessages.scrollTop = simChatMessages.scrollHeight;
 
       try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q, currentTimeFormatted: formatSec(simSec) })
-        });
-        const data = await res.json();
+        const data = await fetch('/api/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: q, currentTimeFormatted: formatSec(simSec), bypassCache })
+        }).then(r => r.json());
         loadingRow.remove();
 
-        const assistRow = document.createElement('div');
-        assistRow.className = 'msg-row msg-assistant';
-        let html = data.answer.replace(/\[VIVO-(\d+)\]/g, `<button class="cite-chip" data-target="entry-VIVO-$1">📍 min</button>`);
-        html = html.replace(/\[HIST-([A-Z0-9]+)\]/g, `<button class="cite-chip">📚 Clase Anterior</button>`);
-        html = html.replace(/\[MAT-([A-Z0-9]+)\]/g, `<button class="cite-chip">📄 Guía</button>`);
-        html = html.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+        const row = document.createElement('div');
+        row.className = 'msg-row msg-assistant';
+        if (data.questionType === 'off_topic') row.style.borderLeft = '3px solid #EF4444';
 
-        let compHtml = '';
-        if (data.complement) {
-          compHtml = `<div class="complement-box"><div class="complement-header">🤖 Complemento IA</div><div>${data.complement}</div></div>`;
-        }
+        let html = (data.answer || '')
+          .replace(/^---+\s*$/gm, '<hr style="border:none; border-top:1px solid var(--border-subtle); margin:8px 0;">')
+          .replace(/^###\s+(.*)$/gm, '<div style="font-size:0.92rem; font-weight:700; color:#F8FAFC; margin:8px 0 3px 0;">$1</div>')
+          .replace(/^##\s+(.*)$/gm, '<div style="font-size:0.98rem; font-weight:700; color:#93C5FD; margin:10px 0 5px 0;">$1</div>')
+          .replace(/^\s*[\*\-]\s+(.*)$/gm, '<div style="padding-left:10px; margin:2px 0;">• $1</div>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\[VIVO-(\d+)\]/g, `<button class="cite-chip" data-target="entry-VIVO-$1">📍 min</button>`)
+          .replace(/\[SLIDE-(\d+)\]/g, `<button class="cite-chip">📑 Lám. $1</button>`)
+          .replace(/\n\n+/g, '<br><br>').replace(/\n/g, '<br>');
 
-        assistRow.innerHTML = `
-          <div class="msg-meta"><span style="font-weight: 700; color: #6EE7B7;">TUTOR PEDAGÓGICO</span></div>
-          <div>${html}</div>
-          ${compHtml}
+        const voiceHtml = data.voicePrompt
+          ? `<div class="voice-prompt-box"><div class="voice-prompt-label">🙋‍♂️ Para levantar la mano / Zoom:</div><div class="voice-prompt-text">"${data.voicePrompt}"</div></div>`
+          : '';
+        const cacheBadge = data.fromCache ? `<span style="font-size:0.65rem; background:rgba(56,189,248,0.14); color:#38BDF8; padding:1px 6px; border-radius:4px;">⚡ Instantáneo</span>` : '';
+        const altBtn = data.fromCache
+          ? `<button type="button" class="btn btn-outline btn-xs sim-alt-btn" style="margin-top:6px; color:#38BDF8;">🔄 Explicar desde otro ángulo</button>`
+          : '';
+
+        row.innerHTML = `
+          <div class="msg-meta"><span><strong>${data.chatMode === 'full_ia' ? 'TUTOR FULL IA' : 'CO-PILOTO'}</strong> ${cacheBadge}</span></div>
+          <div style="font-size:0.84rem;">${html}</div>
+          ${voiceHtml}
+          ${altBtn}
         `;
+        const b = row.querySelector('.sim-alt-btn');
+        if (b) b.addEventListener('click', () => handleSimChat(null, q, true));
 
-        assistRow.querySelectorAll('.cite-chip').forEach(b => {
-          b.addEventListener('click', () => {
-            const t = b.getAttribute('data-target');
-            const el = document.getElementById(t);
-            if (el) {
-              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              el.classList.add('highlight-flash');
-              setTimeout(() => el.classList.remove('highlight-flash'), 2000);
-            }
-          });
-        });
-
-        simChatMessages.appendChild(assistRow);
+        simChatMessages.appendChild(row);
         simChatMessages.scrollTop = simChatMessages.scrollHeight;
 
         if (window.renderMathInElement) {
-          window.renderMathInElement(assistRow, {
+          window.renderMathInElement(row, {
             delimiters: [
               { left: '$$', right: '$$', display: true },
               { left: '$', right: '$', display: false }
             ]
           });
         }
-      } catch (err) {
+        syncState();
+      } catch (_) {
         loadingRow.remove();
       }
+    }
+
+    async function openSimCapsule() {
+      const data = await fetch('/api/live/capsule').then(r => r.json());
+      const c = data.capsule;
+      if (!c) return;
+      let html = '';
+      if (c.teacherEmphasis?.length) {
+        html += `<div style="background:rgba(245,158,11,0.1); padding:8px 10px; border-radius:6px;"><strong style="color:#FCD34D;">📌 Avisos Control:</strong><ul style="margin:4px 0 0 18px;">${c.teacherEmphasis.map(e => `<li>[${e.timestamp}] ${e.text}</li>`).join('')}</ul></div>`;
+      }
+      (c.slideBlocks || []).forEach(sb => {
+        if (!sb.spokenEntries.length && c.totalEntries > 0) return;
+        html += `<div style="background:var(--surface-2); padding:8px 10px; border-radius:6px;"><strong>📑 Lám. ${sb.slideNumber}: ${sb.title}</strong><ul style="margin:4px 0 0 18px;">${sb.spokenEntries.map(se => `<li>[${se.timestamp}] ${se.text}</li>`).join('')}</ul></div>`;
+      });
+      if (c.taFocusPoints?.length) {
+        html += `<div style="background:rgba(139,92,246,0.12); padding:8px 10px; border-radius:6px;"><strong style="color:#DDD6FE;">📋 Pauta Auxiliar:</strong><ul style="margin:4px 0 0 18px;">${c.taFocusPoints.map(tp => `<li><strong>${tp.topic}</strong> (${tp.totalSignals} señales) — ${tp.status}</li>`).join('')}</ul></div>`;
+      }
+      document.getElementById('simCapsuleBody').innerHTML = html || 'Sin datos aún.';
+      document.getElementById('simCapsuleModal').classList.add('active');
     }
 
     function formatSec(sec) {

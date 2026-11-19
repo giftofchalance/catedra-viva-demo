@@ -17,6 +17,7 @@ let activeRecorder = null;
 let uploadQueue = Promise.resolve();
 let latestAlertClusterId = null;
 let latestCapsuleData = null;
+let activeCapsuleTab = 'apunte'; // 'apunte' | 'pauta'
 
 // DOM Elements
 const teacherCourseTitle = document.getElementById('teacherCourseTitle');
@@ -27,6 +28,7 @@ const micTimerDisplay = document.getElementById('micTimerDisplay');
 const vuBar = document.getElementById('vuBar');
 const anchorStatusBadge = document.getElementById('anchorStatusBadge');
 const btnSimulateOneMin = document.getElementById('btnSimulateOneMin');
+const btnEndClassQuick = document.getElementById('btnEndClassQuick');
 const audioSourceControl = document.getElementById('audioSourceControl');
 
 const ucursosDeckLabel = document.getElementById('ucursosDeckLabel');
@@ -78,6 +80,7 @@ const btnCopyStudentUrl = document.getElementById('btnCopyStudentUrl');
 // Capsule Modal
 const btnOpenCapsule = document.getElementById('btnOpenCapsule');
 const capsuleModal = document.getElementById('capsuleModal');
+const capsuleTabsControl = document.getElementById('capsuleTabsControl');
 const btnCloseCapsule = document.getElementById('btnCloseCapsule');
 const capsuleBody = document.getElementById('capsuleBody');
 const btnDownloadCapsule = document.getElementById('btnDownloadCapsule');
@@ -142,26 +145,21 @@ function bindEvents() {
     }
   });
 
-  btnCloseClass.addEventListener('click', async () => {
-    if (confirm('¿Cerrar la clase, generar el Apunte Vivo Fusionado y activar el Modo Full IA Post-Clase?')) {
-      stopRecording();
-      btnCloseClass.disabled = true;
-      btnCloseClass.textContent = '⏳ Archivando...';
-      try {
-        const res = await fetch('/api/teacher/close-class', { method: 'POST' });
-        const data = await res.json();
-        await fetchState();
-        if (data.capsule) {
-          latestCapsuleData = data.capsule;
-          renderCapsuleModal(data.capsule);
-          capsuleModal.classList.add('active');
-        }
-      } catch (e) {
-        alert('Error cerrando clase: ' + e.message);
-      } finally {
-        btnCloseClass.disabled = false;
-        btnCloseClass.textContent = '✨ Cerrar & Full IA';
-      }
+  btnCloseClass.addEventListener('click', handleEndClassOneClick);
+  if (btnEndClassQuick) {
+    btnEndClassQuick.addEventListener('click', handleEndClassOneClick);
+  }
+
+  // Atajo Tecla P para activar/desactivar Modo Pizarra al instante
+  document.addEventListener('keydown', (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.key === 'p' || e.key === 'P') {
+      const activeBtn = chatModeControl.querySelector('.seg-btn.active');
+      const current = activeBtn ? activeBtn.getAttribute('data-mode') : 'active';
+      const next = current === 'paused' ? 'active' : 'paused';
+      setActiveModeUI(next);
+      updateTeacherSettings(next);
     }
   });
 
@@ -230,9 +228,22 @@ function bindEvents() {
       capsuleModal.classList.add('active');
     }
   });
+  if (capsuleTabsControl) {
+    capsuleTabsControl.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeCapsuleTab = btn.getAttribute('data-tab');
+        capsuleTabsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active-source'));
+        btn.classList.add('active-source');
+        if (latestCapsuleData) renderCapsuleModal(latestCapsuleData);
+      });
+    });
+  }
   btnCloseCapsule.addEventListener('click', () => capsuleModal.classList.remove('active'));
   btnDownloadCapsule.addEventListener('click', () => {
-    if (latestCapsuleData) {
+    if (!latestCapsuleData) return;
+    if (activeCapsuleTab === 'pauta') {
+      downloadMarkdownFile(`Pauta_Auxiliar_${latestCapsuleData.courseCode}.md`, latestCapsuleData.taGuideMarkdown);
+    } else {
       downloadMarkdownFile(`Apunte_Vivo_${latestCapsuleData.courseCode}.md`, latestCapsuleData.markdownExport);
     }
   });
@@ -246,6 +257,33 @@ function setActiveModeUI(mode) {
     btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
   });
   modeDescText.textContent = MODE_DESCRIPTIONS[mode] || MODE_DESCRIPTIONS.active;
+}
+
+async function handleEndClassOneClick() {
+  if (isRecording) stopRecording();
+  if (isSimulating) stopSimulation();
+  btnCloseClass.disabled = true;
+  if (btnEndClassQuick) btnEndClassQuick.disabled = true;
+  if (btnEndClassQuick) btnEndClassQuick.textContent = '⏳ Activando Full IA...';
+  try {
+    const res = await fetch('/api/teacher/close-class', { method: 'POST' });
+    const data = await res.json();
+    await fetchState();
+    if (data.capsule) {
+      latestCapsuleData = data.capsule;
+      activeCapsuleTab = 'apunte';
+      renderCapsuleModal(data.capsule);
+      capsuleModal.classList.add('active');
+    }
+  } catch (e) {
+    alert('Error finalizando clase: ' + e.message);
+  } finally {
+    btnCloseClass.disabled = false;
+    if (btnEndClassQuick) {
+      btnEndClassQuick.disabled = false;
+      btnEndClassQuick.textContent = '🏁 Terminar Clase';
+    }
+  }
 }
 
 async function updateTeacherSettings(forcedMode = null) {
@@ -347,7 +385,7 @@ function renderUCursosSlides(ucursosSync, entries = []) {
       <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
         <strong>S${sl.number}</strong> · ${sl.title}
       </span>
-      <span class="tabular-nums" style="font-family:var(--font-mono); font-size:0.68rem;">${countForSlide > 0 ? `${countForSlide} seg` : '—'}</span>
+      <span class="tabular-nums" style="font-family:var(--font-mono); font-size:0.68rem; white-space:nowrap; flex-shrink:0;">${countForSlide > 0 ? `${countForSlide} seg` : '—'}</span>
     `;
     ucursosSlidesList.appendChild(row);
   });
@@ -370,14 +408,15 @@ function renderChapters(chapters = []) {
 }
 
 function updateBoardAlertBanner(clusters = [], lostTotal = 0) {
-  const hotCluster = clusters.find(c => c.status !== 'resolved' && (c.count >= 2 || c.escalatedCount >= 1 || c.lostCount >= 2));
+  const isCleared = (s) => s === 'resolved' || s === 'auto_resolved';
+  const hotCluster = clusters.find(c => !isCleared(c.status) && (c.count >= 2 || c.escalatedCount >= 1 || c.lostCount >= 2));
   if (!hotCluster && lostTotal < 2) {
     boardAlertBanner.classList.add('hidden');
     latestAlertClusterId = null;
     return;
   }
 
-  const target = hotCluster || clusters.find(c => c.status !== 'resolved');
+  const target = hotCluster || clusters.find(c => !isCleared(c.status));
   if (!target) {
     boardAlertBanner.classList.add('hidden');
     latestAlertClusterId = null;
@@ -400,15 +439,23 @@ function renderTopicClusters(clusters = []) {
 
   clustersList.innerHTML = '';
   clusters.forEach(c => {
+    const isResolved = c.status === 'resolved' || c.status === 'auto_resolved';
     const card = document.createElement('div');
-    card.className = `cluster-card ${c.status === 'resolved' ? 'is-resolved' : c.status === 'for_ta' ? 'is-ta' : ''}`;
+    card.className = `cluster-card ${isResolved ? 'is-resolved' : c.status === 'for_ta' ? 'is-ta' : ''}`;
 
     const lastQ = c.questions && c.questions.length > 0 ? c.questions[c.questions.length - 1] : null;
-    const statusBadge = c.status === 'resolved'
+    const statusBadge = c.status === 'auto_resolved'
+      ? `<span style="color:#6EE7B7;">✓ Retomado por el profe [${c.resolvedAt || ''}]</span>`
+      : c.status === 'resolved'
       ? `<span style="color:#6EE7B7;">✓ Aclarado</span>`
       : c.status === 'for_ta'
       ? `<span style="color:#C4B5FD;">📌 Para Ayudantía</span>`
       : `<span style="color:#FCD34D;">🔥 ×${c.count} señales</span>`;
+
+    const extraPulses = [
+      c.fastCount > 0 ? `🐢 ${c.fastCount} ritmo` : '',
+      c.exampleCount > 0 ? `💡 ${c.exampleCount} ejemplo` : ''
+    ].filter(Boolean).join(' • ');
 
     card.innerHTML = `
       <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:0.74rem; font-weight:700;">
@@ -416,7 +463,8 @@ function renderTopicClusters(clusters = []) {
         <span class="tabular-nums">${statusBadge}</span>
       </div>
       <div style="font-size:0.71rem; color:var(--text-muted); line-height:1.35;">${c.suggestion}</div>
-      ${lastQ ? `<div style="font-size:0.71rem; color:#CBD5E1; font-style:italic;">Última duda: "${lastQ}"</div>` : ''}
+      ${extraPulses ? `<div style="font-size:0.69rem; color:#93C5FD;">${extraPulses}</div>` : ''}
+      ${lastQ ? `<div style="font-size:0.71rem; color:#CBD5E1; font-style:italic;">Última señal: "${lastQ}"</div>` : ''}
       <div style="display:flex; gap:5px; margin-top:2px;">
         <button type="button" class="btn btn-outline btn-xs" data-act="resolved">✓ Aclarado</button>
         <button type="button" class="btn btn-outline btn-xs" data-act="for_ta">📌 Ayudantía</button>
@@ -472,6 +520,28 @@ function renderFeedEntries(entries) {
 
 function renderCapsuleModal(capsule) {
   let html = '';
+
+  if (activeCapsuleTab === 'pauta') {
+    if (!capsule.taFocusPoints || capsule.taFocusPoints.length === 0) {
+      capsuleBody.innerHTML = `<div style="color:var(--text-muted);">No hay puntos ciegos ni dudas acumuladas aún para la pauta de ayudantía.</div>`;
+      return;
+    }
+    html = capsule.taFocusPoints.map((tp, idx) => `
+      <div style="background: var(--surface-2); border: 1px solid var(--border-subtle); border-left: 3px solid var(--purple); border-radius: var(--radius-sm); padding: 10px 12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <strong style="color:#DDD6FE;">${idx + 1}. ${tp.topic}</strong>
+          <span class="tabular-nums" style="font-size:0.74rem; color:#FCD34D;">${tp.totalSignals} señales • ${tp.lostCount} "Me perdí"</span>
+        </div>
+        <div style="font-size:0.76rem; color:#6EE7B7; margin-top:3px;">
+          Estado en clase: ${tp.status === 'auto_resolved' ? `✓ Retomado oralmente por el profesor [${tp.resolvedAt || ''}]` : tp.status === 'resolved' ? '✓ Aclarado en pizarra' : tp.status === 'for_ta' ? '📌 Priorizado para Ayudantía' : 'Pendiente para reforzar'}
+        </div>
+        <div style="font-size:0.8rem; color:var(--text); margin-top:4px;"><strong>Sugerencia Auxiliar:</strong> ${tp.suggestion}</div>
+        ${tp.sampleQuestions && tp.sampleQuestions.length > 0 ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:5px;"><strong>Dudas anónimas de alumnos:</strong><ul style="margin:3px 0 0 18px;">${tp.sampleQuestions.map(q => `<li>"${q}"</li>`).join('')}</ul></div>` : ''}
+      </div>
+    `).join('');
+    capsuleBody.innerHTML = html;
+    return;
+  }
 
   if (capsule.teacherEmphasis && capsule.teacherEmphasis.length > 0) {
     html += `
@@ -754,7 +824,7 @@ function toggleSimulatedLecture() {
 
 function startSimulation() {
   isSimulating = true;
-  btnSimulateOneMin.textContent = '⏹ Detener Simulación';
+  btnSimulateOneMin.textContent = '⏹ Detener Demo';
   btnSimulateOneMin.classList.add('btn-danger');
   micStatusText.textContent = '⚡ Simulación de clase activa...';
   micStatusText.style.color = '#38BDF8';
@@ -766,17 +836,16 @@ function startSimulation() {
       const res = await fetch('/api/simulator/step-chunk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ startSecond: simSec, durationSeconds: 5 })
+        body: JSON.stringify({ startSecond: simSec, durationSeconds: 7 })
       });
       const data = await res.json();
-      simSec = data.nextSeconds || (simSec + 5);
+      simSec = data.nextSeconds || (simSec + 7);
       const m = Math.floor(simSec / 60);
       const s = Math.floor(simSec % 60);
       micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       fetchState();
-      if (simSec >= 60) {
+      if (simSec >= 56) {
         stopSimulation();
-        alert('¡Simulación de 1 minuto completada con éxito!');
       }
     } catch (e) {
       console.warn('Error en simulación:', e);
@@ -789,7 +858,7 @@ function startSimulation() {
 
 function stopSimulation() {
   isSimulating = false;
-  btnSimulateOneMin.textContent = '⚡ Simular Clase Hablada (Demo)';
+  btnSimulateOneMin.textContent = '⚡ Simular Demo';
   btnSimulateOneMin.classList.remove('btn-danger');
   micStatusText.textContent = 'Micrófono en espera';
   micStatusText.style.color = '#94A3B8';

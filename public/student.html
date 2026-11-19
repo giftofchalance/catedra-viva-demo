@@ -96,18 +96,25 @@
         <div id="bridgeBody" style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;"></div>
       </details>
 
-      <div class="card-header">
+      <div class="card-header" style="flex-wrap:wrap;">
         <div>
           <span class="card-title">📝 Lo que va diciendo el profesor</span>
           <span id="ucursosStatusTag" style="font-size: 0.7rem; color: #DDD6FE;">U-Cursos Sync</span>
         </div>
-        <label style="font-size: 0.74rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 6px;">
-          <span>Ocultar digresiones</span>
-          <span class="toggle-switch" style="transform:scale(0.85);">
-            <input type="checkbox" id="checkFilterDigressions">
-            <span class="toggle-slider"></span>
-          </span>
-        </label>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <div id="transcriptFilterControl" style="display:flex; gap:4px;">
+            <button type="button" class="btn btn-outline btn-xs active-filter" data-filter="all" style="border-color: var(--primary);">Todo</button>
+            <button type="button" class="btn btn-outline btn-xs" data-filter="importancia">📌 Ojo Control</button>
+            <button type="button" class="btn btn-outline btn-xs" data-filter="formula">🧮 Fórmulas</button>
+          </div>
+          <label style="font-size: 0.72rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 5px;">
+            <span>Sin digresiones</span>
+            <span class="toggle-switch" style="transform:scale(0.8);">
+              <input type="checkbox" id="checkFilterDigressions">
+              <span class="toggle-slider"></span>
+            </span>
+          </label>
+        </div>
       </div>
 
       <div id="studentFeed" class="feed-box">
@@ -120,10 +127,16 @@
         </div>
       </div>
 
-      <!-- Botón Fijo abajo en la tarjeta -->
-      <div class="lost-bar-wrap">
-        <button id="btnLostSignal" class="btn btn-lost" style="width:100%;">
-          ⚡ Me perdí en este minuto (Avisar anónimamente)
+      <!-- Pulso Rápido Anónimo (Presencial y Clase Virtual Zoom/Meet) -->
+      <div class="lost-bar-wrap" style="display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap:6px; width:100%;">
+        <button id="btnLostSignal" class="btn btn-lost btn-xs" style="padding:8px 6px;">
+          ⚡ Me perdí
+        </button>
+        <button id="btnPulseFast" class="btn btn-outline btn-xs" style="padding:8px 6px; color:#93C5FD; border-color:rgba(59,130,246,0.35);">
+          🐢 Muy rápido
+        </button>
+        <button id="btnPulseExample" class="btn btn-outline btn-xs" style="padding:8px 6px; color:#DDD6FE; border-color:rgba(139,92,246,0.35);">
+          💡 Pedir ejemplo
         </button>
       </div>
     </section>
@@ -137,6 +150,9 @@
           🟢 Modo Seguimiento (2–3 líneas + Voz Alta)
         </span>
       </div>
+
+      <!-- Banner / Toast de Cambio de Modo (ej. Clase finalizada -> Full IA) -->
+      <div id="modeToastBanner" style="display:none; background:rgba(139,92,246,0.16); border:1px solid rgba(139,92,246,0.4); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.78rem; color:#EDE9FE; margin-bottom:6px; flex-shrink:0;"></div>
 
       <!-- Banner de Modo Pizarra -->
       <div id="whiteboardBanner" class="whiteboard-banner" style="display: none;">
@@ -216,6 +232,6 @@
     </div>
   </div>
 
-  <script type="module" src="/js/student.js?v=6"></script>
+  <script type="module" src="/js/student.js?v=8"></script>
 </body>
 </html>

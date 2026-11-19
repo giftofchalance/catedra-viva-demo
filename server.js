@@ -135,8 +135,11 @@ function upsertTopicCluster({
       suggestion: detected.suggestion,
       count: 0,
       lostCount: 0,
+      fastCount: 0,
+      exampleCount: 0,
       escalatedCount: 0,
-      status: 'open', // 'open' | 'resolved' | 'for_ta'
+      status: 'open', // 'open' | 'resolved' | 'auto_resolved' | 'for_ta'
+      resolvedAt: null,
       lastTimestamp: timestamp,
       questions: [],
       questionIds: []
@@ -152,8 +155,9 @@ function upsertTopicCluster({
     if (text && !cluster.questions.includes(text)) {
       cluster.questions.push(text);
     }
-    if (cluster.status === 'resolved' && !escalated) {
+    if (cluster.status === 'resolved' || cluster.status === 'auto_resolved') {
       cluster.status = 'open';
+      cluster.resolvedAt = null;
     }
   }
 
@@ -162,13 +166,39 @@ function upsertTopicCluster({
     if (text && !cluster.questions.includes(text)) {
       cluster.questions.push(text);
     }
-    if (cluster.status === 'resolved') {
+    if (cluster.status === 'resolved' || cluster.status === 'auto_resolved') {
       cluster.status = 'open';
+      cluster.resolvedAt = null;
     }
   }
 
   cluster.lastTimestamp = timestamp;
   return cluster;
+}
+
+/**
+ * Auto-Resolución Hands-Free por Voz:
+ * Si había un cluster abierto y el profesor acaba de explicar ese mismo tópico en un segmento nuevo,
+ * marca automáticamente el cluster como 'auto_resolved' sin obligar al docente a tocar la pantalla.
+ */
+function autoResolveClustersFromVoice(course, newEntry) {
+  if (!newEntry || newEntry.category === 'digresion') return [];
+  const spokenTopic = detectTopicCluster({
+    text: newEntry.text,
+    course,
+    liveEntries: [newEntry],
+    slideRef: newEntry.slideRef
+  });
+
+  const resolvedNow = [];
+  liveSession.topicClusters.forEach(c => {
+    if (c.status === 'open' && c.key === spokenTopic.key) {
+      c.status = 'auto_resolved';
+      c.resolvedAt = newEntry.timestamp;
+      resolvedNow.push(c);
+    }
+  });
+  return resolvedNow;
 }
 
 const app = express();
@@ -190,6 +220,7 @@ app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModifi
 // Archivos de audio pregrabados para simulaciones
 const audioMacroPath = path.join(__dirname, 'Modelo IS-LM - Explicado para principiantes!.mp3');
 const audioCalculusPath = path.join(__dirname, 'Clase_Calculo_Derivadas.mp3');
+const audioFinanzasPath = path.join(__dirname, 'Clase_Finanzas_CAPM.mp3');
 
 app.get('/audio/clase.mp3', (req, res) => {
   if (fs.existsSync(audioMacroPath)) res.sendFile(audioMacroPath);
@@ -199,6 +230,11 @@ app.get('/audio/clase.mp3', (req, res) => {
 app.get('/audio/calculo.mp3', (req, res) => {
   if (fs.existsSync(audioCalculusPath)) res.sendFile(audioCalculusPath);
   else res.status(404).json({ error: 'Audio cálculo no encontrado' });
+});
+
+app.get('/audio/finanzas.mp3', (req, res) => {
+  if (fs.existsSync(audioFinanzasPath)) res.sendFile(audioFinanzasPath);
+  else res.status(404).json({ error: 'Audio finanzas no encontrado' });
 });
 
 // Rutas de Vistas Principales
@@ -260,8 +296,10 @@ app.get('/api/live/state', (req, res) => {
   const sortedClusters = liveSession.topicClusters
     .slice()
     .sort((a, b) => {
-      if (a.status === 'resolved' && b.status !== 'resolved') return 1;
-      if (b.status === 'resolved' && a.status !== 'resolved') return -1;
+      const aDone = a.status === 'resolved' || a.status === 'auto_resolved';
+      const bDone = b.status === 'resolved' || b.status === 'auto_resolved';
+      if (aDone && !bDone) return 1;
+      if (bDone && !aDone) return -1;
       return (b.count + b.escalatedCount * 2) - (a.count + a.escalatedCount * 2);
     });
 
@@ -373,6 +411,9 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
       entry.id = `VIVO-${idx + 1}`;
     });
 
+    // Auto-Resolución Hands-Free: si había dudas abiertas sobre este tópico y el profe acaba de retomarlo
+    autoResolveClustersFromVoice(currentCourse, newEntry);
+
     // Actualizar capítulos inteligentes con Debounce (mínimo 5 palabras, no digresión y >=15s desde el último capítulo)
     const wordCount = newEntry.text.split(/\s+/).filter(Boolean).length;
     if (
@@ -426,13 +467,15 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
 app.post('/api/simulator/step-chunk', async (req, res) => {
   let tempOut = null;
   try {
-    const { startSecond = 0, durationSeconds = 5 } = req.body;
+    const { startSecond = 0, durationSeconds = 7 } = req.body;
     const currentCourse = getCourse(activeCourseId);
 
     // Seleccionar archivo según el ramo activo
     let targetFile = audioMacroPath;
-    if (activeCourseId === 'probabilidades' || activeCourseId === 'finanzas') {
-      targetFile = audioCalculusPath; // fallback con audio matemático claro
+    if (activeCourseId === 'finanzas' && fs.existsSync(audioFinanzasPath)) {
+      targetFile = audioFinanzasPath;
+    } else if (activeCourseId === 'probabilidades') {
+      targetFile = audioCalculusPath;
     }
 
     if (!fs.existsSync(targetFile)) {
@@ -488,6 +531,9 @@ app.post('/api/simulator/step-chunk', async (req, res) => {
       liveSession.entries.push(newEntry);
       liveSession.isActive = true;
       liveSession.elapsedSeconds = startSecond + durationSeconds;
+
+      // Auto-Resolución Hands-Free en simulador también
+      autoResolveClustersFromVoice(currentCourse, newEntry);
     }
 
     const pace = calculatePaceMetrics(liveSession.entries);
@@ -558,10 +604,43 @@ app.post('/api/teacher/cluster-action', (req, res) => {
   const cluster = liveSession.topicClusters.find(c => c.id === clusterId);
   if (!cluster) return res.status(404).json({ error: 'Cluster no encontrado' });
 
-  if (['open', 'resolved', 'for_ta'].includes(status)) {
+  if (['open', 'resolved', 'auto_resolved', 'for_ta'].includes(status)) {
     cluster.status = status;
   }
   res.json({ success: true, cluster });
+});
+
+app.post('/api/live/pulse', (req, res) => {
+  const { type = 'lost', timestamp = '00:00' } = req.body;
+  const currentCourse = getCourse(activeCourseId);
+  const lastEntry = liveSession.entries[liveSession.entries.length - 1];
+
+  if (type === 'lost') {
+    const existing = liveSession.lostAlerts.find(a => a.timestamp === timestamp);
+    if (existing) existing.count = (existing.count || 1) + 1;
+    else liveSession.lostAlerts.push({ timestamp, count: 1 });
+  }
+
+  const pulseLabel = type === 'fast'
+    ? '🐢 Piden bajar un poco el ritmo'
+    : type === 'example'
+    ? '💡 Piden un ejemplo aplicado en pizarra'
+    : '';
+
+  const cluster = upsertTopicCluster({
+    course: currentCourse,
+    text: pulseLabel,
+    isLostAlert: type === 'lost',
+    timestamp,
+    slideRef: lastEntry?.slideRef || null
+  });
+
+  if (type === 'fast') cluster.fastCount = (cluster.fastCount || 0) + 1;
+  if (type === 'example') cluster.exampleCount = (cluster.exampleCount || 0) + 1;
+
+  const totalLost = liveSession.lostAlerts.reduce((sum, a) => sum + a.count, 0);
+  console.log(`[Pulso Aula] (${type}) en [${timestamp}] -> "${cluster.label}"`);
+  res.json({ success: true, totalLost, cluster });
 });
 
 app.get('/api/live/capsule', (req, res) => {
@@ -652,9 +731,9 @@ app.post('/api/chat', async (req, res) => {
       liveSession.tokenomics.onPremCostUsd = Number((liveSession.tokenomics.onPremCostUsd + (response.tokenMetrics.onPremGpuMarginalUsd || 0)).toFixed(6));
     }
 
-    // Agrupar en Radar del Profe / Auxiliar si es duda académica o en Modo Pizarra
+    // Agrupar en Radar del Profe / Auxiliar solo durante la clase en vivo (no reabrir Radar en estudio Post-Clase Full IA)
     let clusterInfo = null;
-    if (response.questionType !== 'off_topic') {
+    if (response.questionType !== 'off_topic' && liveSession.teacherSettings.chatState !== 'full_ia') {
       const slideMatch = matchSlideForSegment(activeCourseId, cleanQ);
       const cluster = upsertTopicCluster({
         course: currentCourse,
