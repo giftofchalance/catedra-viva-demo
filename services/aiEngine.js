@@ -322,39 +322,285 @@ export function calculatePaceMetrics(entries = []) {
   };
 }
 
+// --------------------------------------------------------------------------
+// CLUSTERING SEMÁNTICO DE TÓPICOS PARA RADAR DOCENTE / AUXILIAR
+// --------------------------------------------------------------------------
+
+const TOPIC_RULES = [
+  {
+    key: 'van_tir',
+    label: 'Criterios VAN vs. TIR',
+    keywords: ['van', 'tir', 'crear valor', 'crea valor', 'proyectos mutuamente'],
+    suggestion: 'Aclarar en pizarra la diferencia entre tasa porcentual (TIR) y creación neta de riqueza en pesos (VAN).'
+  },
+  {
+    key: 'wacc',
+    label: 'Costo de Capital (WACC)',
+    keywords: ['wacc', 'costo promedio', 'descontar flujos', 'financiamiento', 'deuda y patrimonio'],
+    suggestion: 'Reforzar por qué el WACC debe ser consistente con el riesgo de los flujos de caja libres de la firma.'
+  },
+  {
+    key: 'capm_beta',
+    label: 'Modelo CAPM, Beta y Retorno',
+    keywords: ['capm', 'beta', 'riesgo sistemático', 'sistematico', 'retorno exigido', 'retorno esperado', 'prima por riesgo', 'libre de riesgo'],
+    suggestion: 'Enfatizar la distinción entre retorno esperado vs. exigido y que Beta solo mide riesgo sistemático.'
+  },
+  {
+    key: 'portafolios',
+    label: 'Portafolios y Diversificación',
+    keywords: ['portafolio', 'diversific', 'idiosincrático', 'idiosincratico', 'correlación', 'correlacion', 'varianza'],
+    suggestion: 'Mostrar con el ejemplo de 2 activos con ρ < 1 cómo cae la varianza sin sacrificar retorno esperado.'
+  },
+  {
+    key: 'curva_is',
+    label: 'Curva IS y Mercado de Bienes',
+    keywords: ['curva is', 'mercado de bienes', 'gasto público', 'multiplicador', 'crowding out', 'inversión'],
+    suggestion: 'Repasar cómo el aumento del gasto público eleva Y e i, generando desplazamiento parcial de la inversión.'
+  },
+  {
+    key: 'curva_lm',
+    label: 'Curva LM y Mercado Monetario',
+    keywords: ['curva lm', 'mercado monetario', 'banco central', 'oferta monetaria', 'demanda de dinero', 'saldos reales'],
+    suggestion: 'Explicar en 2 min por qué al subir el PIB crece la demanda de dinero y presiona al alza la tasa r.'
+  },
+  {
+    key: 'equilibrio_islm',
+    label: 'Equilibrio Simultáneo IS-LM',
+    keywords: ['is-lm', 'islm', 'equilibrio simultáneo', 'un solo gráfico'],
+    suggestion: 'Mostrar en la pizarra el cruce (r*, Y*) y el efecto combinado de políticas fiscales y monetarias.'
+  },
+  {
+    key: 'bayes',
+    label: 'Teorema de Bayes y Probabilidad Total',
+    keywords: ['bayes', 'probabilidad total', 'partición', 'sensibilidad', 'especificidad', 'prevalencia', 'posteriori', 'priori'],
+    suggestion: 'Dibujar el árbol de particiones B_i antes de aplicar la fórmula de Bayes para fijar la intuición.'
+  },
+  {
+    key: 'independencia',
+    label: 'Independencia vs. Eventos Disjuntos',
+    keywords: ['independ', 'disjunt', 'condicional'],
+    suggestion: 'Aclarar el error clásico: dos eventos disjuntos con P>0 nunca son independientes.'
+  }
+];
+
 /**
- * 4. Tutor Pedagógico (Buckets 4, 5 y 6 Exclusivos: qwen/qwen3.8-27b -> openai/gpt-oss-120b -> gemini-3.8-flash)
+ * Clasifica una pregunta o evento "Me perdí" en un tópico unificado del Radar Profe/Auxiliar.
+ */
+export function detectTopicCluster({ text = '', course, liveEntries = [], slideRef = null }) {
+  const low = (text || '').toLowerCase();
+
+  for (const rule of TOPIC_RULES) {
+    if (rule.keywords.some(kw => low.includes(kw))) {
+      return {
+        key: rule.key,
+        label: rule.label,
+        suggestion: rule.suggestion
+      };
+    }
+  }
+
+  // Intentar por slide asociada a la consulta o al último fragmento hablado
+  if (slideRef && slideRef.title) {
+    return {
+      key: `slide_${slideRef.id}`,
+      label: `Lámina ${slideRef.number}: ${slideRef.title}`,
+      suggestion: `Reforzar la explicación verbal asociada a la Lámina ${slideRef.number} ("${slideRef.title}").`
+    };
+  }
+
+  // Si es una señal de "Me perdí" sin texto o consulta general, asociar al último segmento con tema
+  const lastEntry = liveEntries[liveEntries.length - 1];
+  if (lastEntry) {
+    const entryLow = (lastEntry.text || '').toLowerCase();
+    for (const rule of TOPIC_RULES) {
+      if (rule.keywords.some(kw => entryLow.includes(kw))) {
+        return {
+          key: rule.key,
+          label: rule.label,
+          suggestion: rule.suggestion
+        };
+      }
+    }
+    if (lastEntry.slideRef?.title) {
+      return {
+        key: `slide_${lastEntry.slideRef.id}`,
+        label: `Lámina ${lastEntry.slideRef.number}: ${lastEntry.slideRef.title}`,
+        suggestion: `Pausa breve recomendada en [${lastEntry.timestamp}]: revisar el último punto de "${lastEntry.slideRef.title}".`
+      };
+    }
+    if (lastEntry.chapterTitle) {
+      return {
+        key: `ch_${lastEntry.chapterTitle.toLowerCase().replace(/\W+/g, '_')}`,
+        label: lastEntry.chapterTitle,
+        suggestion: `Repetir el concepto recién introducido en el minuto [${lastEntry.timestamp}].`
+      };
+    }
+  }
+
+  return {
+    key: `general_${course?.id || 'curso'}`,
+    label: `Duda General de ${course?.code || 'la Clase'}`,
+    suggestion: 'Revisar el último bloque expuesto y confirmar si el paso clave quedó claro antes de avanzar.'
+  };
+}
+
+// --------------------------------------------------------------------------
+// TOKENOMICS SIN SESGO EPISTÉMICO (CACHÉ CON GUARDIA DE NEGACIÓN E INVALIDADOR TEMPORAL)
+// --------------------------------------------------------------------------
+
+const SAFE_SEMANTIC_CACHE = new Map();
+
+export function clearSemanticCache() {
+  SAFE_SEMANTIC_CACHE.clear();
+}
+
+function extractLogicalSignature(text = '') {
+  const low = text.toLowerCase();
+  const negations = (low.match(/\b(no|nunca|jamás|jamas|sin|ni|tampoco|ningún|ninguna|falso|incorrecto|contrario|diferencia|distinto)\b/g) || []).sort().join(',');
+  const operators = (low.match(/(<=|>=|!=|==|<|>|=|\+|\-|\d+(\.\d+)?)/g) || []).sort().join(',');
+  return `${negations}|${operators}`;
+}
+
+function tokenizeSemanticCore(text = '') {
+  const stopwords = new Set(['el', 'la', 'los', 'las', 'de', 'del', 'en', 'y', 'o', 'a', 'que', 'es', 'un', 'una', 'por', 'para', 'con', 'se', 'como', 'cual', 'cuál', 'qué', 'me', 'puedes', 'explicar', 'profesor', 'profe', 'dijo']);
+  return text
+    .toLowerCase()
+    .replace(/[¿?¡!.,;:()"]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length > 2 && !stopwords.has(w));
+}
+
+function computeJaccard(tokensA, tokensB) {
+  if (tokensA.length === 0 || tokensB.length === 0) return 0;
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  let inter = 0;
+  for (const item of setA) {
+    if (setB.has(item)) inter++;
+  }
+  const union = setA.size + setB.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+function checkSafeSemanticCache({ question, courseId, chatMode, transcriptCount }) {
+  const signature = extractLogicalSignature(question);
+  const tokens = tokenizeSemanticCore(question);
+  const normalizedExact = question.toLowerCase().replace(/[¿?¡!.,\s]+/g, ' ').trim();
+
+  for (const [, cached] of SAFE_SEMANTIC_CACHE.entries()) {
+    // 1. Mismo ramo y mismo modo (Seguimiento vs Full IA)
+    if (cached.courseId !== courseId || cached.chatMode !== chatMode) continue;
+    // 2. Invalidador Temporal (Temporal Drift): si la clase avanzó en transcripción, el contexto cambió -> NO usar caché viejo
+    if (cached.transcriptCount !== transcriptCount) continue;
+    // 3. Guardia de Negación y Matiz Numérico (Negation Blindness): si difieren en "no", números u operadores -> PROHIBIDO HIT
+    if (cached.logicalSignature !== signature) continue;
+
+    // 4. Coincidencia exacta o alta similitud estructural (>= 0.85 Jaccard)
+    if (cached.normalizedExact === normalizedExact || computeJaccard(tokens, cached.tokens) >= 0.85) {
+      return cached.payload;
+    }
+  }
+  return null;
+}
+
+function recordSafeSemanticCache({ question, courseId, chatMode, transcriptCount, payload }) {
+  if (!payload || payload.questionType === 'off_topic' || payload.status === 'paused') return;
+  const key = `${courseId}:${chatMode}:${transcriptCount}:${question.toLowerCase().trim()}`;
+  SAFE_SEMANTIC_CACHE.set(key, {
+    courseId,
+    chatMode,
+    transcriptCount,
+    normalizedExact: question.toLowerCase().replace(/[¿?¡!.,\s]+/g, ' ').trim(),
+    logicalSignature: extractLogicalSignature(question),
+    tokens: tokenizeSemanticCore(question),
+    payload
+  });
+}
+
+function estimateTokenMetrics({ fullContextText, question, answerText, fromCache }) {
+  const approxPrefixTokens = Math.max(120, Math.round((fullContextText.length + 1400) / 4));
+  const approxDeltaTokens = Math.max(15, Math.round(question.length / 4));
+  const approxOutputTokens = Math.max(20, Math.round((answerText || '').length / 4));
+
+  // Con Prefix Caching (vLLM on-premise o Prompt Caching), la sala comparte ~92% del prefijo de transcripción/RAG
+  const savedByPrefixOrCache = fromCache
+    ? approxPrefixTokens + approxDeltaTokens + approxOutputTokens
+    : Math.round(approxPrefixTokens * 0.92);
+
+  // Costo API Cloud promedio (~$0.60 / 1M input + $1.80 / 1M output para modelos medianos sin APC completo)
+  const cloudCostNoOptUsd = ((approxPrefixTokens + approxDeltaTokens) * 0.60 + approxOutputTokens * 1.80) / 1000000;
+  // Costo marginal GPU Universidad (RTX 4090 / L40S corriendo vLLM en electricidad ~0.000008 USD por query con APC)
+  const onPremGpuMarginalUsd = fromCache ? 0 : 0.000008;
+
+  return {
+    fromCache,
+    prefixTokens: approxPrefixTokens,
+    deltaTokens: approxDeltaTokens,
+    outputTokens: approxOutputTokens,
+    savedTokens: savedByPrefixOrCache,
+    cloudCostNoOptUsd: Number(cloudCostNoOptUsd.toFixed(6)),
+    onPremGpuMarginalUsd
+  };
+}
+
+/**
+ * 4. Tutor Pedagógico Modular en 3 Modos (Buckets 4, 5 y 6 Exclusivos: qwen/qwen3.8-27b -> openai/gpt-oss-120b -> gemini-3.8-flash)
+ * - chatState === 'paused'  -> Modo Pizarra (pausa respuestas, registra duda en Radar)
+ * - chatState === 'active'  -> Modo Seguimiento y Participación (Default: 2-3 líneas + cómo preguntar en voz alta / Radar)
+ * - chatState === 'full_ia' -> Modo Tutor Full IA (Desbloqueado por el Profe o en Post-Clase)
  */
 export async function answerStudentQuestion({
   question,
   course,
   liveEntries = [],
   teacherSettings = { chatState: 'active', allowComplement: true, hideDigressions: false },
-  currentTimeFormatted = '00:00'
+  currentTimeFormatted = '00:00',
+  bypassCache = false
 }) {
-  // 1. Control Docente: Si el profesor puso Modo Pizarra, pausar el chat
-  if (teacherSettings.chatState === 'paused') {
+  const chatMode = teacherSettings.chatState || 'active';
+
+  // 1. Control Docente: Modo Pizarra (Pausa)
+  if (chatMode === 'paused') {
     return {
       status: 'paused',
+      chatMode: 'paused',
       questionType: 'paused',
       canForwardToTeacher: false,
-      answer: `⏸️ **Modo Pizarra Activo**\n\nEl profesor ha pausado temporalmente el chat para que todos presten atención a la explicación en curso. Tu consulta quedó registrada para cuando se reactive el chat.`,
+      voicePrompt: null,
+      tokenMetrics: {
+        fromCache: false,
+        prefixTokens: 0,
+        deltaTokens: 0,
+        outputTokens: 0,
+        savedTokens: 0,
+        cloudCostNoOptUsd: 0,
+        onPremGpuMarginalUsd: 0
+      },
+      answer: `⏸️ **Modo Pizarra Activo**\n\nEl profesor pausó temporalmente el chatbot para centrar la atención en la explicación presencial. Tu duda quedó registrada anónimamente en el **Radar del Profesor y Auxiliar**.`,
       sources: []
     };
   }
 
-  // 2. Construir Contexto Estructurado preservando SIEMPRE los IDs exactos [VIVO-X]
+  // 2. Construir Contexto Estructurado (Láminas U-Cursos si existen + En Vivo [VIVO-X] + Historial + Materiales)
   let contextBlocks = [];
 
-  // A. Transcripción en Vivo de la Clase de Hoy (Prioridad #1: lo que el profesor está diciendo ahora mismo)
+  // A. Transcripción en Vivo de la Clase de Hoy (Prioridad #1)
   if (liveEntries.length > 0) {
     liveEntries.forEach((entry) => {
-      const segId = entry.id; // Mantiene siempre el ID real (ej. VIVO-1, VIVO-2...)
-      contextBlocks.push(`[${segId}] (Dicho EN VIVO hoy en min [${entry.timestamp}] por ${entry.speaker}):\n"${entry.text}"`);
+      const segId = entry.id;
+      const slideNote = entry.slideRef ? ` | Asociado a Lámina ${entry.slideRef.number}: "${entry.slideRef.title}"` : '';
+      contextBlocks.push(`[${segId}] (Dicho EN VIVO hoy en min [${entry.timestamp}]${slideNote} por ${entry.speaker}):\n"${entry.text}"`);
     });
   }
 
-  // B. Historial de Clases Previas del Curso
+  // B. Láminas Auto-Sincronizadas de U-Cursos (Si existen, sino degradación limpia a contexto plano)
+  if (course.ucursosSync?.slides && course.ucursosSync.slides.length > 0) {
+    course.ucursosSync.slides.forEach(sl => {
+      contextBlocks.push(`[${sl.id}] (PPT U-Cursos — Lámina ${sl.number}: ${sl.title}):\n- ${(sl.bulletPoints || []).join('\n- ')}`);
+    });
+  }
+
+  // C. Historial de Clases Previas del Curso
   if (course.historicalClasses && course.historicalClasses.length > 0) {
     course.historicalClasses.forEach(hc => {
       let fText = (hc.keyFormulas || []).map(f => `  - $${f}$`).join('\n');
@@ -362,7 +608,7 @@ export async function answerStudentQuestion({
     });
   }
 
-  // C. Materiales y Guías
+  // D. Materiales y Guías
   if (course.materials && course.materials.length > 0) {
     course.materials.forEach(mat => {
       contextBlocks.push(`[${mat.id}] (Material del Curso — ${mat.title}, ${mat.pages}):\n${mat.content}`);
@@ -371,43 +617,80 @@ export async function answerStudentQuestion({
 
   const fullContextText = contextBlocks.join('\n\n---\n\n');
 
-  // 3. System Prompt con distinción clara entre Off-Topic (Mundial/Chistes) vs. Duda Académica No Vista
-  const systemInstruction = `Eres "Cátedra Viva", el tutor pedagógico de aula aumentada para la clase en vivo del ${course.instructor} (Curso base: "${course.code} — ${course.name}").
+  // 3. Revisar Caché Semántico Seguro (Solo si no pidió enfoque alternativo y no cambió ni negación ni minuto/entradas)
+  if (!bypassCache) {
+    const cachedHit = checkSafeSemanticCache({
+      question,
+      courseId: course.id,
+      chatMode,
+      transcriptCount: liveEntries.length
+    });
+    if (cachedHit) {
+      return {
+        ...cachedHit,
+        fromCache: true,
+        tokenMetrics: estimateTokenMetrics({
+          fullContextText,
+          question,
+          answerText: cachedHit.answer,
+          fromCache: true
+        })
+      };
+    }
+  }
 
-REGLAS CRÍTICAS DE RESPUESTA (SÍGUELAS ESTRICTAMENTE):
+  // 4. Instrucción Adaptativa Modular según Modo ('active' = Seguimiento corto vs 'full_ia' = Estudio profundo)
+  const modeRules = chatMode === 'full_ia'
+    ? `MODO ACTUAL: TUTOR FULL IA (POST-CLASE / DESBLOQUEADO POR EL PROFESOR)
+- El profesor habilitó el modo de estudio profundo.
+- Explica paso a paso con rigor universitario completo.
+- Adaptación Modular Automática (sin importar el ramo, desde Electromagnetismo a Finanzas o Macro):
+  * Si la duda es matemática/formal: incluye derivación clara en $LaTeX$ ($...$ o $$...$$) paso a paso y chequea supuestos.
+  * Si la duda es conceptual/causal: explica intuición, mecanismo causa-efecto y contraste.
+  * Si combina ambos (como Física, Electromagnetismo o Finanzas): une intuición física/económica + fórmula en $LaTeX$.
+- Conecta explícitamente lo dicho hoy en vivo ([VIVO-X]) con las láminas ([SLIDE-X]) y clases previas ([HIST-X]).
+- Cierra con 1 pregunta corta de chequeo conceptual para verificar que el estudiante entendió.`
+    : `MODO ACTUAL: AULA EN VIVO — SEGUIMIENTO RÁPIDO Y PARTICIPACIÓN (MUY IMPORTANTE)
+- EL PROFESOR SIGUE HABLANDO EN VIVO. NO escribas un ensayo largo que distraiga al estudiante de la clase.
+- TU OBJETIVO ES QUE EL ALUMNO SE REENGANCHE EN 10 SEGUNDOS O LEVANTE LA MANO PARA PREGUNTAR AL PROFESOR.
+- Reglas de longitud y formato para CASO C y CASO B:
+  * Responde en MÁXIMO 2 a 3 líneas concisas y directas.
+  * Adaptación Modular Automática según la pregunta: si requiere una fórmula puntual, incluye el término clave en $LaTeX$; si es conceptual, resume la relación causal en 1 frase clara; si mezcla ambos, únelos en máximo 3 líneas.
+  * Cita siempre las fuentes exactas "[VIVO-X]", "[SLIDE-X]", "[HIST-X]" o "[MAT-X]".
+  * OBLIGATORIO en dudas académicas (CASO C o CASO B): Al final de tu respuesta, escribe exactamente una línea con la marca "@@VOZ_ALTA@@" seguida de 1 sola pregunta corta, natural y respetuosa formulada en primera persona para que el estudiante se atreva a levantar la mano y preguntársela en voz alta al profesor (ej: "@@VOZ_ALTA@@ Profesor, respecto al CAPM, ¿eso significa que el riesgo idiosincrático no recibe premio en el retorno exigido?").`;
 
-1. DISTINCIÓN ENTRE PREGUNTA OFF-TOPIC vs. DUDA ACADÉMICA SIN FUENTE vs. PREGUNTA CON FUENTE:
-   - CASO A (OFF-TOPIC / AJENO A LA UNIVERSIDAD: deportes, quién ganó el mundial, farándula, chistes, política contingente, videojuegos, geografía general):
-     Empieza tu respuesta con la marca exacta "@@OFF_TOPIC@@" y escribe únicamente:
-     "🚫 Esa pregunta no está relacionada con la clase ni con materias académicas del curso."
-     (NUNCA ofrezcas preguntarle al profesor temas off-topic como el mundial).
+  const altAngleNote = bypassCache
+    ? `\nNOTA EXTRA: El alumno pidió "Explicar desde otro ángulo". Usa una analogía distinta, otro ejemplo o enfoque diferente al habitual.`
+    : '';
 
-   - CASO B (DUDA ACADÉMICA / UNIVERSITARIA, PERO QUE AÚN NO APARECE EN LAS FUENTES ENTREGADAS):
-     Si el alumno pregunta un concepto académico válido que NO se menciona ni en la transcripción en vivo [VIVO-X] ni en el historial/guías [HIST-X]/[MAT-X]:
-     Empieza tu respuesta con la marca exacta "@@SIN_FUENTE_CLASE@@" seguida de:
-     "Eso aún no se ha mencionado en lo que va de clase ni en el material cargado."
-     ${teacherSettings.allowComplement
-       ? `Y luego, dado que el profesor tiene ACTIVO el Complemento IA, agrega la marca "@@COMPLEMENTO@@" seguida de una breve explicación académica rigurosa para orientar al alumno.`
-       : `Como el profesor tiene apagado el Complemento IA, invita al alumno a usar el botón de abajo para enviársela como duda anónima al profesor.`}
+  const systemInstruction = `Eres "Cátedra Viva", el co-piloto pedagógico de aula para la clase de ${course.instructor} ("${course.code} — ${course.name}").
 
-   - CASO C (PREGUNTA SOBRE LO DICHO EN LA TRANSCRIPCIÓN EN VIVO [VIVO-X] O EN EL MATERIAL [HIST-X]/[MAT-X]):
-     ¡PRIORIZA SIEMPRE LO QUE EL PROFESOR ACABA DE DECIR EN VIVO ([VIVO-X])! Incluso si el profesor en vivo está introduciendo un ejemplo de otro tema (como IS-LM o cálculo), responde sobre lo que dijo citando "[VIVO-X]".
-     Cita obligatoriamente las fuentes usadas con sus corchetes exactos: "[VIVO-1]", "[HIST-M1]", "[MAT-M1]".
+${modeRules}${altAngleNote}
 
-2. MODOS PEDAGÓGICOS PARA EL CASO C:
-   - Preguntas Factuales o Conceptuales: Explicación directa, clara y concisa con citas "[VIVO-X]" / "[HIST-X]" y fórmulas en LaTeX ($...$ o $$...$$).
-   - Ejercicios o Cálculos Prácticos (ESCALERA SOCRÁTICA):
-     * En el primer intento: Da una Pista Conceptual (Nivel 1), muestra la fórmula aplicable en LaTeX y haz una pregunta guía para el primer paso.
-     * Si el alumno pide explícitamente el paso a paso o dice que no pudo: Entrega la resolución completa en LaTeX y cierra con una pregunta de verificación.
+FILTRO ESTRICTO DE ALCANCE (APLICA EN TODOS LOS MODOS):
+1. CASO A (OFF-TOPIC / AJENO A LA UNIVERSIDAD: fútbol, mundial, farándula, chistes, capitales de países, sumas triviales tipo 3+3 sin contexto del ramo, videojuegos):
+   Empieza tu respuesta con la marca exacta "@@OFF_TOPIC@@" y escribe únicamente:
+   "🚫 Esa pregunta no está relacionada con la clase ni con materias académicas del curso."
+   (NUNCA agregues @@VOZ_ALTA@@ ni @@COMPLEMENTO@@ en CASO A).
 
-3. COMPLEMENTO IA OPCIONAL (en Caso C):
+2. CASO B (DUDA ACADÉMICA UNIVERSITARIA VÁLIDA, PERO CUYO TÓPICO NO APARECE EN NINGUNA FUENTE):
+   Usa "@@SIN_FUENTE_CLASE@@" ÚNICAMENTE cuando el tema principal preguntado NO aparezca ni en [VIVO-X], ni en [SLIDE-X], ni en [HIST-X], ni en [MAT-X].
+   Empieza tu respuesta con "@@SIN_FUENTE_CLASE@@" seguida de:
+   "Eso aún no se ha mencionado en lo que va de clase ni en el material cargado."
    ${teacherSettings.allowComplement
-     ? `- Si la explicación basada en la clase es muy breve (porque el profesor recién dijo 1 o 2 frases en vivo) y puedes enriquecerla con contexto académico propio, responde primero citando "[VIVO-X]" y luego añade en una nueva línea "@@COMPLEMENTO@@" con la explicación extendida.`
-     : `- NO agregues nada fuera de lo que dicen las fuentes entregadas.`}`;
+     ? `Y luego agrega "@@COMPLEMENTO@@" seguido de ${chatMode === 'active' ? '2 líneas de orientación breve.' : 'una explicación académica rigurosa.'}`
+     : `Invita brevemente a enviarla al Radar del Profesor/Auxiliar.`}
+   ${chatMode === 'active' ? 'Incluye además al final "@@VOZ_ALTA@@" con 1 frase sugerida para preguntarle si lo veremos hoy.' : ''}
 
-  const userPrompt = `[MINUTO ACTUAL DE LA CLASE]: ${currentTimeFormatted}
+3. CASO C (EL TEMA SÍ APARECE EN [VIVO-X], [SLIDE-X], [HIST-X] O [MAT-X]):
+   Si el concepto o sigla preguntada aparece aunque sea brevemente en [VIVO-X], [SLIDE-X], [HIST-X] o [MAT-X], RESPONDE DIRECTO como CASO C (NO uses @@SIN_FUENTE_CLASE@@).
+   Prioriza siempre lo dicho EN VIVO hoy ([VIVO-X]) y las láminas ([SLIDE-X]), citando siempre con corchetes exactos.
+   ${chatMode === 'full_ia' ? 'En Modo Full IA entrega aquí la explicación completa (intuición + fórmulas en $LaTeX$ + conexión histórica + pregunta de chequeo).' : ''}
+   ${chatMode === 'full_ia' && teacherSettings.allowComplement ? 'Si agregas analogías o derivaciones que van más allá de lo escrito textualmente en las fuentes, colócalas después de "@@COMPLEMENTO@@".' : ''}`;
 
-[FUENTES VERIFICABLES DISPONIBLES (EN VIVO + HISTORIAL + GUÍAS)]:
+  const userPrompt = `[MINUTO ACTUAL]: ${currentTimeFormatted}
+
+[FUENTES VERIFICABLES]:
 ${fullContextText || '(La clase recién comienza)'}
 
 [PREGUNTA DEL ESTUDIANTE]:
@@ -415,7 +698,7 @@ ${fullContextText || '(La clase recién comienza)'}
 
 Respuesta:`;
 
-  // 4. Pool de Modelos Exclusivos para el Chatbot (Bucket 4: qwen/qwen3.8-27b -> Bucket 5: openai/gpt-oss-120b -> Bucket 6: gemini-3.8-flash)
+  // 5. Pool Exclusivo del Chatbot (Bucket 4: qwen/qwen3.8-27b -> Bucket 5: openai/gpt-oss-120b -> Bucket 6: gemini-3.8-flash)
   let rawAnswer = '';
   let modelUsed = '';
 
@@ -435,13 +718,13 @@ Respuesta:`;
               { role: 'system', content: systemInstruction },
               { role: 'user', content: userPrompt }
             ],
-            temperature: 0.2,
-            max_tokens: 850
+            temperature: bypassCache ? 0.45 : 0.2,
+            max_tokens: chatMode === 'full_ia' ? 950 : 380
           })
         });
 
         if (res.status === 429) {
-          console.warn(`[Chatbot Pool] Rate limit en ${modelId}, rotando automáticamente al siguiente bucket...`);
+          console.warn(`[Chatbot Pool] Rate limit en ${modelId}, rotando...`);
           continue;
         }
 
@@ -459,7 +742,6 @@ Respuesta:`;
     }
   }
 
-  // Fallback a Bucket 6 (Gemini 3.8 Flash)
   if (!rawAnswer && GEMINI_API_KEY) {
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
@@ -467,7 +749,7 @@ Respuesta:`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 850 }
+          generationConfig: { temperature: bypassCache ? 0.45 : 0.2, maxOutputTokens: chatMode === 'full_ia' ? 950 : 380 }
         })
       });
 
@@ -485,7 +767,6 @@ Respuesta:`;
     throw new Error('No se pudo obtener respuesta de ningún motor de IA.');
   }
 
-  // Procesar marcas de control
   const isOffTopic = rawAnswer.includes('@@OFF_TOPIC@@');
   const isUnseenAcademic = rawAnswer.includes('@@SIN_FUENTE_CLASE@@');
 
@@ -494,6 +775,15 @@ Respuesta:`;
     .replace(/@@SIN_FUENTE_CLASE@@/g, '')
     .trim();
 
+  // Extraer marca @@VOZ_ALTA@@ (pregunta sugerida para levantar la mano)
+  let voicePrompt = null;
+  if (cleanedRaw.includes('@@VOZ_ALTA@@')) {
+    const vParts = cleanedRaw.split('@@VOZ_ALTA@@');
+    cleanedRaw = vParts[0].trim();
+    voicePrompt = vParts.slice(1).join(' ').replace(/^["'«“]|["'»”]$/g, '').trim();
+  }
+
+  // Extraer marca @@COMPLEMENTO@@
   let mainAnswer = cleanedRaw;
   let complementText = null;
 
@@ -503,23 +793,154 @@ Respuesta:`;
     complementText = parts[1].trim();
   }
 
-  if (!teacherSettings.allowComplement) {
+  if (!teacherSettings.allowComplement || isOffTopic) {
     complementText = null;
+  }
+  if (isOffTopic) {
+    voicePrompt = null;
+  }
+
+  const questionType = isOffTopic ? 'off_topic' : isUnseenAcademic ? 'unseen_academic' : 'grounded';
+
+  const resultPayload = {
+    status: 'ok',
+    chatMode,
+    questionType,
+    canForwardToTeacher: !isOffTopic,
+    modelUsed,
+    fromCache: false,
+    answer: mainAnswer,
+    complement: complementText,
+    voicePrompt,
+    tokenMetrics: estimateTokenMetrics({
+      fullContextText,
+      question,
+      answerText: mainAnswer + (complementText || ''),
+      fromCache: false
+    }),
+    timestamp: new Date().toISOString()
+  };
+
+  if (!bypassCache && !isOffTopic) {
+    recordSafeSemanticCache({
+      question,
+      courseId: course.id,
+      chatMode,
+      transcriptCount: liveEntries.length,
+      payload: resultPayload
+    });
+  }
+
+  return resultPayload;
+}
+
+/**
+ * 5. Generador de "Apunte Vivo Fusionado" (Lámina U-Cursos + Explicación Oral + Énfasis + Radar Auxiliar)
+ * Funciona tanto si el curso tiene láminas cargadas como si fue 100% pizarra libre (contexto plano).
+ */
+export function generateFusedPostClassCapsule(course, liveEntries = [], topicClusters = []) {
+  const slides = course?.ucursosSync?.slides || [];
+  const slideBlocks = slides.map(sl => {
+    const matchedEntries = liveEntries.filter(e => e.slideRef && e.slideRef.id === sl.id);
+    return {
+      slideId: sl.id,
+      slideNumber: sl.number,
+      title: sl.title,
+      bulletPoints: sl.bulletPoints || [],
+      spokenEntries: matchedEntries
+    };
+  });
+
+  // Intervenciones que no mapearon a una slide (ej. pizarra libre o clases sin PPT)
+  const unmappedEntries = liveEntries.filter(e => !e.slideRef);
+
+  // Énfasis docentes ("ojo con esto", "control", "importante")
+  const teacherEmphasis = liveEntries.filter(e =>
+    e.category === 'importancia' ||
+    /\b(ojo|importante|control|prueba|examen|no confundan)\b/i.test(e.text || '')
+  );
+
+  // Puntos de refuerzo agrupados para el Auxiliar (Ayudantía)
+  const taFocusPoints = (topicClusters || [])
+    .slice()
+    .sort((a, b) => b.count - a.count)
+    .map(c => ({
+      topic: c.label,
+      totalSignals: c.count,
+      lostCount: c.lostCount || 0,
+      status: c.status || 'open',
+      suggestion: c.suggestion,
+      sampleQuestions: (c.questions || []).slice(0, 3)
+    }));
+
+  // Construir Markdown exportable de Apunte Vivo
+  const mdLines = [
+    `# Apunte Vivo Fusionado — ${course.code}: ${course.name}`,
+    `**Profesor:** ${course.instructor} | **Fuente PPT:** ${course.ucursosSync?.deckTitle || 'Pizarra Libre (Sin PPT)'}`,
+    ''
+  ];
+
+  if (teacherEmphasis.length > 0) {
+    mdLines.push(`## 📌 Avisos y Énfasis del Profesor ("Ojo para el Control")`);
+    teacherEmphasis.forEach(em => mdLines.push(`- **[${em.timestamp}]** ${em.text}`));
+    mdLines.push('');
+  }
+
+  slideBlocks.forEach(sb => {
+    if (sb.spokenEntries.length === 0 && liveEntries.length > 0) return;
+    mdLines.push(`## 📑 Lámina ${sb.slideNumber}: ${sb.title}`);
+    sb.bulletPoints.forEach(bp => mdLines.push(`> *Diapositiva:* ${bp}`));
+    if (sb.spokenEntries.length > 0) {
+      mdLines.push(`\n**Lo que explicó el profesor en sala:**`);
+      sb.spokenEntries.forEach(se => mdLines.push(`- **[${se.timestamp}]** ${se.text}`));
+    }
+    mdLines.push('');
+  });
+
+  if (unmappedEntries.length > 0) {
+    mdLines.push(`## 📝 Explicaciones Adicionales de Pizarra / Contexto Libre`);
+    unmappedEntries.forEach(ue => mdLines.push(`- **[${ue.timestamp}]** ${ue.text}`));
+    mdLines.push('');
+  }
+
+  // Pauta separada para el Auxiliar
+  const taMdLines = [
+    `# Pauta de Refuerzo para Auxiliar — ${course.code}: ${course.name}`,
+    `Generado automáticamente desde el Radar Anónimo de Comprensión (Capa 2).`,
+    ''
+  ];
+
+  if (taFocusPoints.length === 0) {
+    taMdLines.push(`- No se registraron cuellos de botella críticos durante la sesión.`);
+  } else {
+    taFocusPoints.forEach((tp, i) => {
+      taMdLines.push(`## ${i + 1}. ${tp.topic} (${tp.totalSignals} señales / ${tp.lostCount} "Me perdí")`);
+      taMdLines.push(`- **Estado en clase:** ${tp.status === 'resolved' ? 'Aclarado en pizarra' : tp.status === 'for_ta' ? 'Marcado para Ayudantía' : 'Pendiente'}`);
+      taMdLines.push(`- **Foco sugerido:** ${tp.suggestion}`);
+      if (tp.sampleQuestions.length > 0) {
+        taMdLines.push(`- **Dudas reales anónimas de los estudiantes:**`);
+        tp.sampleQuestions.forEach(sq => taMdLines.push(`  - *"${sq}"*`));
+      }
+      taMdLines.push('');
+    });
   }
 
   return {
-    status: 'ok',
-    questionType: isOffTopic ? 'off_topic' : isUnseenAcademic ? 'unseen_academic' : 'grounded',
-    canForwardToTeacher: isUnseenAcademic,
-    modelUsed,
-    answer: mainAnswer,
-    complement: complementText,
-    timestamp: new Date().toISOString()
+    courseCode: course.code,
+    courseName: course.name,
+    deckTitle: course.ucursosSync?.deckTitle || null,
+    totalEntries: liveEntries.length,
+    teacherEmphasis,
+    slideBlocks,
+    unmappedEntries,
+    taFocusPoints,
+    markdownExport: mdLines.join('\n'),
+    taGuideMarkdown: taMdLines.join('\n')
   };
 }
 
 /**
- * 5. Generar Resumen Post-Clase para guardar en RAG Histórico
+ * 6. Generar Resumen Post-Clase para guardar en RAG Histórico
  */
 export async function generateClassSummary(course, liveEntries = []) {
   const fullTranscript = liveEntries.map(e => `[${e.timestamp}] ${e.speaker}: ${e.text}`).join('\n');

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Cátedra Viva — Panel del Profesor / Micrófono</title>
-  <link rel="stylesheet" href="/css/app.css">
+  <title>Cátedra Viva — Panel Docente y Auxiliar</title>
+  <link rel="stylesheet" href="/css/app.css?v=6">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -12,164 +12,188 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <style>
-    .teacher-container {
-      max-width: 1400px;
-      margin: 0 auto;
-      padding: 1rem 1.25rem;
-      display: grid;
-      grid-template-columns: 340px 1fr 340px;
-      gap: 1.25rem;
-      width: 100%;
-    }
-    @media (max-width: 1100px) {
-      .teacher-container { grid-template-columns: 1fr; }
-    }
     .mic-hero-card {
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
-      gap: 1rem;
-      padding: 1.5rem 1rem;
+      gap: 10px;
+      padding: 14px;
     }
     .control-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.6rem 0;
-      border-bottom: 1px solid var(--surface-border);
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border-subtle);
     }
-    .control-row:last-child { border-bottom: none; }
-    .switch-toggle {
-      cursor: pointer;
-      font-size: 0.88rem;
-      font-weight: 600;
-    }
-    .qr-modal {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.8);
-      z-index: 100;
+    .control-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .slide-pill-item {
+      display: flex;
       align-items: center;
-      justify-content: center;
-      padding: 1rem;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 5px 8px;
+      border-radius: var(--radius-xs);
+      background: var(--surface-2);
+      border: 1px solid var(--border-subtle);
+      font-size: 0.74rem;
+      color: var(--text-muted);
     }
-    .qr-modal.active { display: flex; }
-    .qr-card {
-      background: var(--surface);
-      border: 1px solid var(--surface-border);
-      border-radius: var(--radius);
-      padding: 2rem;
-      text-align: center;
-      max-width: 360px;
-      width: 100%;
+    .slide-pill-item.is-active {
+      background: rgba(139, 92, 246, 0.14);
+      border-color: rgba(139, 92, 246, 0.4);
+      color: #DDD6FE;
+      font-weight: 600;
     }
   </style>
 </head>
-<body>
+<body class="app-viewport-locked">
 
-  <!-- Topbar -->
+  <!-- Topbar Unificada -->
   <header class="topbar">
     <div class="brand-wrap">
-      <span class="brand-icon">🎙️</span>
+      <a href="/" class="brand-icon" title="Volver al inicio" style="text-decoration:none; color:inherit;">🎙️</a>
       <div>
         <div class="brand-title" id="teacherCourseTitle">Cargando curso...</div>
-        <div class="brand-subtitle">Panel Docente & Transmisor de Aula</div>
+        <div class="brand-subtitle">Panel Docente &amp; Auxiliar • U-Cursos Auto-Sync</div>
       </div>
     </div>
     <div class="topbar-actions">
-      <button id="btnShowQr" class="btn btn-outline" style="font-size: 0.8rem;">
-        📱 Código / QR Alumnos
+      <button id="btnOpenPrivacy" class="privacy-pill" title="Ver garantías de privacidad y Tokenomics GPU">
+        <span>🛡️</span>
+        <span id="privacyPillText">Audio Efímero • Anónimo</span>
       </button>
-      <a href="/estudiante" target="_blank" class="btn btn-outline" style="font-size: 0.8rem; color: #6EE7B7;">
-        🎓 Abrir Vista Estudiante ➔
+      <button id="btnOpenCapsule" class="btn btn-outline btn-xs">
+        📘 Apunte Vivo (Slide + Voz)
+      </button>
+      <button id="btnShowQr" class="btn btn-outline btn-xs">
+        📱 QR Alumnos
+      </button>
+      <a href="/estudiante" target="_blank" class="btn btn-outline btn-xs" style="color: #6EE7B7; border-color: rgba(16, 185, 129, 0.3);">
+        🎓 Vista Estudiante ➔
       </a>
     </div>
   </header>
 
-  <!-- Layout de 3 Columnas: Micrófono / Feed en Vivo / Controles y Métricas Read.ai -->
+  <!-- Banner Superior de Alerta Docente (Legible a 3 metros desde la pizarra) -->
+  <div id="boardAlertBanner" class="top-alert-banner hidden">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size: 1rem; font-weight: 800; color: #FCD34D;">🔥 RADAR DE PIZARRA:</span>
+      <span id="boardAlertText" style="font-size: 0.92rem; font-weight: 600; color: #FFFFFF;"></span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px;">
+      <button id="btnAlertResolve" class="btn btn-xs" style="background: rgba(16, 185, 129, 0.2); border-color: rgba(16, 185, 129, 0.45); color: #6EE7B7;">
+        ✓ Aclarado en Pizarra
+      </button>
+      <button id="btnAlertForTa" class="btn btn-xs" style="background: rgba(139, 92, 246, 0.2); border-color: rgba(139, 92, 246, 0.45); color: #DDD6FE;">
+        📌 Pasar a Ayudantía
+      </button>
+    </div>
+  </div>
+
+  <!-- Layout de 3 Columnas -->
   <main class="teacher-container">
 
-    <!-- COLUMNA 1: MICRÓFONO Y CAPTURA ACÚSTICA (TELÉFONO O LAPTOP) -->
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
+    <!-- COLUMNA 1: CAPTADOR DE AUDIO (SALA PRESENCIAL O ZOOM/MEET) + U-CURSOS + CAPÍTULOS -->
+    <div class="teacher-col-scroll">
       <section class="card mic-hero-card">
-        <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">
-          Transmisor de Voz (Groq Whisper Turbo)
-        </span>
+        <div style="width:100%;">
+          <div style="font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; margin-bottom: 6px;">
+            Fuente de Audio de la Clase
+          </div>
+          <div class="segmented-control segmented-2" id="audioSourceControl">
+            <button type="button" class="seg-btn active-source" data-source="mic">🎙️ Micrófono Sala</button>
+            <button type="button" class="seg-btn" data-source="virtual">💻 Virtual (Zoom/Meet)</button>
+          </div>
+        </div>
 
         <button id="btnToggleMic" class="btn-record-main" title="Iniciar o pausar transmisión">
           <span id="micIcon">🎙️</span>
         </button>
 
         <div>
-          <div id="micStatusText" style="font-size: 0.95rem; font-weight: 700; color: #94A3B8;">Micrófono en espera</div>
-          <div id="micTimerDisplay" style="font-family: var(--font-mono); font-size: 1.5rem; font-weight: 800; color: #38BDF8; margin-top: 0.2rem;">
+          <div id="micStatusText" style="font-size: 0.88rem; font-weight: 700; color: #94A3B8;">Micrófono en espera</div>
+          <div id="micTimerDisplay" class="tabular-nums" style="font-family: var(--font-mono); font-size: 1.4rem; font-weight: 800; color: #38BDF8; margin-top: 2px;">
             00:00
           </div>
         </div>
 
-        <!-- VU Meter con Noise Gate -->
         <div style="width: 100%;">
-          <div style="display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.2rem;">
-            <span>Nivel de Voz (dBFS)</span>
-            <span id="anchorStatusBadge" style="color: #6EE7B7; font-weight: 600;">Auto-ancla lista</span>
+          <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted);">
+            <span>Nivel Acústico</span>
+            <span id="anchorStatusBadge" style="color: #6EE7B7; font-weight: 600;">Whisper Large v3</span>
           </div>
           <div class="vu-track">
             <div id="vuBar" class="vu-bar"></div>
-            <div class="vu-gate-marker" style="left: 30%;" title="Umbral de ruido cercano (-35 dBFS)"></div>
           </div>
         </div>
 
-        <!-- Botón de Simulación de 1 Minuto de Clase -->
-        <button id="btnSimulateOneMin" class="btn btn-outline" style="width: 100%; font-size: 0.82rem; margin-top: 0.5rem;">
-          ⚡ Simular 1 Minuto de Clase Hablada (Auto)
+        <button id="btnSimulateOneMin" class="btn btn-outline" style="width: 100%; font-size: 0.76rem; padding: 6px 10px;">
+          ⚡ Simular Clase Hablada (Demo)
         </button>
       </section>
 
-      <!-- Panel de Capítulos Inteligentes (Read.ai Smart Chapters) -->
+      <!-- U-Cursos Auto-Sync (Mapeo automático a láminas escuetas) -->
       <section class="card">
-        <div class="card-header">
-          <span class="card-title">📑 Capítulos Generados (Read.ai)</span>
+        <div class="card-header" style="margin-bottom: 6px; padding-bottom: 6px;">
+          <span class="card-title" style="font-size: 0.82rem;">📑 Slides U-Cursos (Auto-Map)</span>
+          <span style="font-size: 0.65rem; color: #DDD6FE; background: var(--purple-soft); padding: 2px 6px; border-radius: 4px; font-weight: 600;">Auto</span>
         </div>
-        <div id="chaptersList" style="display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.82rem;">
-          <div style="color: var(--text-muted);">Los subtemas aparecerán automáticamente a medida que hables.</div>
+        <div id="ucursosDeckLabel" style="font-size: 0.72rem; color: var(--text-muted); margin-bottom: 6px;"></div>
+        <div id="ucursosSlidesList" style="display: flex; flex-direction: column; gap: 4px;"></div>
+      </section>
+
+      <!-- Capítulos Read.ai -->
+      <section class="card">
+        <div class="card-header" style="margin-bottom: 6px; padding-bottom: 6px;">
+          <span class="card-title" style="font-size: 0.82rem;">📑 Capítulos (Read.ai)</span>
+        </div>
+        <div id="chaptersList" style="display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem;">
+          <div style="color: var(--text-muted);">Los subtemas aparecerán automáticamente.</div>
         </div>
       </section>
     </div>
 
-
-    <!-- COLUMNA 2: TRANSCRIPCIÓN Y ETIQUETADO SEMÁNTICO EN TIEMPO REAL -->
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <section class="card" style="flex: 1; display: flex; flex-direction: column;">
+    <!-- COLUMNA 2: TRANSCRIPCIÓN EN VIVO + TELEMETRÍA TOKENOMICS & PRIVACIDAD -->
+    <div class="col-panel" style="gap: 10px;">
+      <section class="card col-panel" style="flex: 1;">
         <div class="card-header">
-          <span class="card-title">📝 Transcripción en Vivo con Micro-Labeler</span>
-          <button id="btnResetLecture" class="btn btn-danger" style="font-size: 0.75rem; padding: 0.25rem 0.55rem;">
+          <span class="card-title">📝 Transcripción en Vivo &amp; Mapeo a Láminas</span>
+          <button id="btnResetLecture" class="btn btn-danger btn-xs">
             Limpiar sesión
           </button>
         </div>
 
-        <div id="feedList" class="feed-box" style="flex: 1; max-height: 580px;">
+        <div id="feedList" class="feed-box">
           <div id="feedEmptyState" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
-            <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🎙️</div>
-            <strong>Micrófono en espera</strong>
-            <p style="font-size: 0.85rem; margin-top: 0.25rem;">
-              Habla por el teléfono o presiona <strong>"Simular 1 Minuto"</strong>. Whisper transcribirá y el Micro-Labeler clasificará conceptos, fórmulas y digresiones.
+            <div style="font-size: 2rem; margin-bottom: 8px;">🎙️</div>
+            <strong>Transmisor listo</strong>
+            <p style="font-size: 0.82rem; margin-top: 4px;">
+              El audio presencial o virtual (Zoom/Meet) se transcribe al instante, se mapea automáticamente a la PPT de U-Cursos (o queda en contexto plano) y se borra de inmediato tras transcribir.
             </p>
           </div>
         </div>
       </section>
+
+      <!-- Barra de Telemetría Tokenomics y Privacidad Efímera -->
+      <div class="telemetry-footer-bar">
+        <span class="tabular-nums" id="telemetryPrivacyCount">🛡️ 0 chunks borrados (&lt;1s)</span>
+        <span class="tabular-nums" id="telemetryTokenSaved">⚡ Prefix/Cache: 0 tok ahorrados</span>
+        <span class="tabular-nums" id="telemetryGpuVsCloud" style="color: #6EE7B7;">🖥️ GPU U: $0.000 vs Cloud $0.000</span>
+      </div>
     </div>
 
-
-    <!-- COLUMNA 3: MÉTRICAS READ.AI & CONTROL MAESTRO DOCENTE -->
-    <div style="display: flex; flex-direction: column; gap: 1rem;">
-      <!-- Métricas Read.ai -->
+    <!-- COLUMNA 3: READ.AI + CONTROL DE 3 MODOS + RADAR CLUSTERING PROFE/AUXILIAR -->
+    <div class="teacher-col-scroll">
+      <!-- Métricas Read.ai en 1 sola fila -->
       <section class="card">
-        <div class="card-header">
-          <span class="card-title">⚡ Métricas de Oratoria (Read.ai)</span>
+        <div class="card-header" style="margin-bottom: 8px; padding-bottom: 6px;">
+          <span class="card-title" style="font-size: 0.85rem;">⚡ Oratoria en Vivo (Read.ai)</span>
+          <span id="paceBadge" style="font-size: 0.72rem; font-weight: 700; color: #6EE7B7;">En espera</span>
         </div>
-        <div class="readai-bar">
+        <div class="readai-bar" style="margin-bottom: 0;">
           <div class="readai-metric">
             <span class="readai-lbl">Velocidad</span>
             <span id="statWpm" class="readai-val">0 PPM</span>
@@ -183,94 +207,149 @@
             <span id="statLostCount" class="readai-val" style="color: #FCD34D;">0</span>
           </div>
         </div>
-        <div id="paceBadge" style="font-size: 0.8rem; font-weight: 600; color: #6EE7B7;">
-          Ritmo: En espera
+      </section>
+
+      <!-- Control Maestro de 3 Modos -->
+      <section class="card">
+        <div class="card-header" style="margin-bottom: 8px; padding-bottom: 6px;">
+          <span class="card-title" style="font-size: 0.85rem;">🎛️ Control Maestro del Chatbot</span>
+        </div>
+
+        <div class="segmented-control" id="chatModeControl" style="margin-bottom: 6px;">
+          <button type="button" class="seg-btn" data-mode="paused" title="Pausa el chat para atención 100% en pizarra">🟡 Pizarra</button>
+          <button type="button" class="seg-btn active" data-mode="active" title="Respuestas cortas (2-3 líneas) + sugerencia para levantar la mano">🟢 Seguimiento</button>
+          <button type="button" class="seg-btn" data-mode="full_ia" title="Desbloquea explicaciones profundas paso a paso">🟣 Full IA</button>
+        </div>
+        <div id="modeDescText" style="font-size: 0.73rem; color: var(--text-muted); margin-bottom: 6px;">
+          En vivo: 2–3 líneas + frase lista para levantar la mano (no distrae de la clase).
+        </div>
+
+        <div class="control-row">
+          <div>
+            <strong style="font-size: 0.8rem;">Complemento IA</strong>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">Permite contexto extra fuera de lo dicho hoy</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="checkComplement" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="control-row">
+          <div>
+            <strong style="font-size: 0.8rem;">Ocultar Digresiones</strong>
+            <div style="font-size: 0.7rem; color: var(--text-muted);">Filtra anécdotas en pantalla alumno</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="checkDigressions">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+          <button id="btnCloseClass" class="btn btn-purple btn-xs" style="padding: 7px 6px;">
+            ✨ Cerrar &amp; Full IA
+          </button>
+          <button id="btnDownloadTaGuide" class="btn btn-outline btn-xs" style="padding: 7px 6px;">
+            📋 Pauta Auxiliar (.md)
+          </button>
         </div>
       </section>
 
-      <!-- Control Maestro de Atención del Aula -->
+      <!-- Radar Agrupado para Profesor y Auxiliar -->
       <section class="card">
-        <div class="card-header">
-          <span class="card-title">🎛️ Control Maestro del Aula</span>
+        <div class="card-header" style="margin-bottom: 8px; padding-bottom: 6px;">
+          <span class="card-title" style="font-size: 0.85rem;">📡 Radar de Dudas (Profe &amp; Auxiliar)</span>
+          <span id="radarTotalBadge" class="tabular-nums" style="font-size: 0.7rem; color: var(--text-muted);">0 señales</span>
         </div>
-
-        <!-- Switch 1: Modo Pizarra (Pausar Chat) -->
-        <div class="control-row">
-          <div>
-            <strong>Estado del Chatbot</strong>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Pausa el chat para que atiendan a la pizarra</div>
+        <div id="clustersList" style="display: flex; flex-direction: column; gap: 6px; max-height: 165px; overflow-y: auto;">
+          <div style="font-size: 0.76rem; color: var(--text-muted);">
+            Las preguntas repetidas y avisos de "Me perdí" se agruparán automáticamente por tópico aquí.
           </div>
-          <select id="selectChatState" class="btn btn-outline" style="font-size: 0.8rem; font-weight: 700;">
-            <option value="active" selected>🟢 Chat Activo</option>
-            <option value="paused">🟡 Modo Pizarra (Pausado)</option>
-          </select>
-        </div>
-
-        <!-- Switch 2: Complemento IA -->
-        <div class="control-row">
-          <div>
-            <strong>Complemento IA</strong>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Recuadro violeta de conocimiento extra</div>
-          </div>
-          <input type="checkbox" id="checkComplement" checked style="transform: scale(1.3); cursor: pointer;">
-        </div>
-
-        <!-- Switch 3: Filtro de Digresiones -->
-        <div class="control-row">
-          <div>
-            <strong>Ocultar Digresiones</strong>
-            <div style="font-size: 0.75rem; color: var(--text-muted);">Atenúa chistes/anécdotas en alumnos</div>
-          </div>
-          <input type="checkbox" id="checkDigressions" style="transform: scale(1.3); cursor: pointer;">
-        </div>
-
-        <!-- Botón Cerrar Clase y Guardar en RAG -->
-        <button id="btnCloseClass" class="btn btn-primary" style="width: 100%; margin-top: 1rem; background: linear-gradient(135deg, #7C3AED, #6D28D9);">
-          ✨ Cerrar Clase y Guardar en RAG Histórico
-        </button>
-      </section>
-
-      <!-- Bandeja de Dudas de Estudiantes en Vivo -->
-      <section class="card">
-        <div class="card-header">
-          <span class="card-title">🙋‍♂️ Dudas de Estudiantes en Vivo</span>
-        </div>
-        <div id="forwardedQuestionsList" style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.82rem; max-height: 210px; overflow-y: auto;">
-          <div style="color: var(--text-muted);">Las dudas enviadas por los alumnos aparecerán aquí en tiempo real.</div>
         </div>
       </section>
 
       <!-- Selector Rápido de Ramo -->
-      <section class="card">
-        <div class="card-header">
-          <span class="card-title">📚 Cambiar Asignatura Activa</span>
+      <section class="card" style="padding: 10px 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">📚 Asignatura Activa</span>
         </div>
-        <select id="teacherCourseSelect" class="btn btn-outline" style="width: 100%; font-size: 0.85rem; font-weight: 600;">
+        <select id="teacherCourseSelect" class="btn btn-outline" style="width: 100%; font-size: 0.8rem; justify-content: flex-start;">
           <option value="macro">IN4123 — Macroeconomía (IS-LM)</option>
           <option value="probabilidades">IN3401 — Probabilidades y Bayes</option>
-          <option value="finanzas">IN5233 — Finanzas, Tasas y Swaps</option>
+          <option value="finanzas">IN5233 — Finanzas (CAPM, WACC, VAN/TIR)</option>
         </select>
       </section>
     </div>
 
   </main>
 
-  <!-- Modal QR para que los estudiantes escaneen con la cámara -->
-  <div id="qrModal" class="qr-modal">
-    <div class="qr-card">
-      <h3 style="margin-bottom: 0.5rem;">Entrar a la Clase</h3>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-        Pide a tus compañeros que abran este enlace o escaneen con su celular:
-      </p>
-      <div style="background: white; padding: 1rem; border-radius: 12px; display: inline-block; margin-bottom: 1rem;">
-        <!-- QR dinámico vía servicio seguro -->
-        <img id="qrImg" alt="QR de la clase" width="180" height="180">
+  <!-- MODAL 1: QR DE LA SALA (SVG LOCAL + COPIAR ENLACE) -->
+  <div id="qrModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 380px; text-align: center;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h3 style="font-size: 1rem;">Acceso para Estudiantes</h3>
+        <button id="btnCloseQr" class="btn btn-outline btn-xs">Cerrar</button>
       </div>
-      <div id="qrUrlDisplay" style="font-family: var(--font-mono); font-size: 0.88rem; color: #38BDF8; margin-bottom: 1rem; word-break: break-all;"></div>
-      <button id="btnCloseQr" class="btn btn-outline" style="width: 100%;">Cerrar</button>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 12px;">
+        Proyecta este QR en la pizarra o comparte el enlace en el chat de Zoom/Meet (acceso anónimo, sin cuentas):
+      </p>
+      <div id="qrSvgContainer" style="background: #FFFFFF; padding: 14px; border-radius: 10px; display: inline-flex; align-items:center; justify-content:center; margin-bottom: 12px;"></div>
+      <div id="qrUrlDisplay" style="font-family: var(--font-mono); font-size: 0.78rem; color: #38BDF8; margin-bottom: 12px; word-break: break-all;"></div>
+      <button id="btnCopyStudentUrl" class="btn btn-primary" style="width: 100%;">
+        📋 Copiar Enlace de la Clase
+      </button>
     </div>
   </div>
 
-  <script type="module" src="/js/teacher.js?v=5"></script>
+  <!-- MODAL 2: APUNTE VIVO FUSIONADO POST-CLASE -->
+  <div id="capsuleModal" class="modal-overlay">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+        <div>
+          <h3 style="font-size: 1.05rem;">📘 Apunte Vivo Fusionado (Láminas + Voz + Radar)</h3>
+          <div style="font-size: 0.74rem; color: var(--text-muted);">Une las slides de U-Cursos con lo que realmente explicó el profesor en sala.</div>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button id="btnDownloadCapsule" class="btn btn-primary btn-xs">📥 Descargar (.md)</button>
+          <button id="btnCloseCapsule" class="btn btn-outline btn-xs">Cerrar</button>
+        </div>
+      </div>
+      <div id="capsuleBody" style="display:flex; flex-direction:column; gap:12px; font-size: 0.85rem;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: PRIVACIDAD EXPLÍCITA Y TOKENOMICS GPU -->
+  <div id="privacyModal" class="modal-overlay">
+    <div class="modal-card" style="max-width: 600px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+        <h3 style="font-size: 1rem;">🛡️ Privacidad, Ética y Arquitectura de Costos (GPU U)</h3>
+        <button id="btnClosePrivacy" class="btn btn-outline btn-xs">Cerrar</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:10px; font-size:0.83rem; line-height:1.5;">
+        <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--success);">
+          <strong>1. Audio 100% Efímero (Zero-Retention Biometrics)</strong>
+          <p style="color: var(--text-muted); margin-top: 3px;">
+            Ningún fragmento de voz del profesor ni del aula se almacena en disco o base de datos. Cada chunk se borra inmediatamente tras transcribir (<span id="modalDeletedChunks" class="tabular-nums" style="color:#6EE7B7; font-weight:700;">0</span> archivos destruidos en esta sesión).
+          </p>
+        </div>
+        <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--primary);">
+          <strong>2. Privacidad en 2 Capas (Cero Inhibición al Preguntar)</strong>
+          <p style="color: var(--text-muted); margin-top: 3px;">
+            Las dudas estudiantiles y avisos de "Me perdí" no usan cuentas ni identificadores personales. El profesor y el auxiliar reciben exclusivamente clusters agregados anónimos (Capa 2).
+          </p>
+        </div>
+        <div style="background: var(--surface-2); padding: 10px 12px; border-radius: var(--radius-sm); border-left: 3px solid var(--purple);">
+          <strong>3. Tokenomics sin Sesgo &amp; Despliegue GPU Dedicado (vLLM)</strong>
+          <p style="color: var(--text-muted); margin-top: 3px;">
+            • <strong>Anti-sesgo epistémico:</strong> El caché respeta guardia de negación/operadores e invalidación temporal por minuto.<br>
+            • <strong>Prefix KV-Cache (92% compartido):</strong> En una sala de 80 alumnos el prefijo es idéntico. Con GPUs dedicadas en la Facultad (ej. 2× RTX 4090 o L40S corriendo vLLM de día y NLP/investigación de noche), el costo marginal cae >75% vs API Cloud comercial y ningún dato sale de la red universitaria.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/js/teacher.js?v=6"></script>
 </body>
 </html>

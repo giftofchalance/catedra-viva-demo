@@ -13,6 +13,53 @@ export const COURSES_DB = {
     badgeColor: '#2563EB',
     description: 'Equilibrio macroeconómico de corto y mediano plazo en economías cerradas y abiertas (IS-LM, AS-AD, Solow).',
     glossary: 'IS-LM, curva IS, curva LM, tasa de interés, gasto público, multiplicador keynesiano, propensión marginal a consumir, banco central, oferta monetaria, política fiscal, política monetaria, Solow, estado estacionario, inversión, consumo autónomo.',
+    ucursosSync: {
+      synced: true,
+      sourceLabel: 'U-Cursos • Material Docente (Auto-Sync)',
+      deckTitle: 'Cátedra 12 — Equilibrio Conjunto IS-LM.pptx',
+      slides: [
+        {
+          id: 'SLIDE-1',
+          number: 1,
+          title: 'Mercado de Bienes y Curva IS',
+          keywords: ['curva is', 'mercado de bienes', 'inversión', 'gasto público', 'pib', 'pendiente negativa', 'tasa de interés'],
+          bulletPoints: [
+            'Equilibrio producción = demanda agregada: Y = C(Y-T) + I(r) + G',
+            'Relación inversa entre tasa de interés real (r) e ingreso de equilibrio (Y)'
+          ]
+        },
+        {
+          id: 'SLIDE-2',
+          number: 2,
+          title: 'Multiplicador y Política Fiscal',
+          keywords: ['multiplicador', 'propensión marginal', 'consumo', 'política fiscal', 'crowding out', 'desplazamiento'],
+          bulletPoints: [
+            'Multiplicador keynesiano α = 1 / (1 - c(1-t))',
+            'Efecto desplazamiento (crowding out) sobre la inversión privada'
+          ]
+        },
+        {
+          id: 'SLIDE-3',
+          number: 3,
+          title: 'Mercado Monetario y Curva LM',
+          keywords: ['curva lm', 'mercado monetario', 'dinero', 'banco central', 'oferta monetaria', 'liquidez', 'pendiente positiva'],
+          bulletPoints: [
+            'Equilibrio saldos reales: M/P = L(r, Y) = kY - hr',
+            'Política monetaria y sensibilidad de la demanda de dinero a r'
+          ]
+        },
+        {
+          id: 'SLIDE-4',
+          number: 4,
+          title: 'Equilibrio Simultáneo IS-LM',
+          keywords: ['is-lm', 'islm', 'equilibrio simultáneo', 'un solo gráfico', 'mix de políticas', 'estado macroeconómico'],
+          bulletPoints: [
+            'Intersección (r*, Y*) con equilibrio conjunto en bienes y dinero',
+            'Análisis de shocks de demanda y coordinación fiscal-monetaria'
+          ]
+        }
+      ]
+    },
     historicalClasses: [
       {
         id: 'HIST-M1',
@@ -54,6 +101,53 @@ export const COURSES_DB = {
     badgeColor: '#7C3AED',
     description: 'Fundamentos de teoría de probabilidades, variables aleatorias, distribuciones y teoremas de límites para ingeniería.',
     glossary: 'espacio muestral, probabilidad condicional, Teorema de Bayes, probabilidad total, independencia estocástica, variable aleatoria, esperanza matemática, varianza, distribución normal, Bernoulli, Poisson, función de densidad, función de distribución acumulada, axiomas de Kolmogorov.',
+    ucursosSync: {
+      synced: true,
+      sourceLabel: 'U-Cursos • Material Docente (Auto-Sync)',
+      deckTitle: 'Clase 05 — Condicionalidad, Particiones y Bayes.pptx',
+      slides: [
+        {
+          id: 'SLIDE-1',
+          number: 1,
+          title: 'Axiomas y Espacio Muestral',
+          keywords: ['kolmogorov', 'axioma', 'espacio muestral', 'sigma', 'disjuntos', 'unión'],
+          bulletPoints: [
+            'P(Ω) = 1, P(A) ≥ 0, σ-aditividad',
+            'Eventos disjuntos vs. unión general'
+          ]
+        },
+        {
+          id: 'SLIDE-2',
+          number: 2,
+          title: 'Probabilidad Condicional',
+          keywords: ['condicional', 'dado que', 'regla de la multiplicación', 'intersección'],
+          bulletPoints: [
+            'P(A|B) = P(A ∩ B) / P(B)',
+            'Reducción del espacio muestral al evento condicionante'
+          ]
+        },
+        {
+          id: 'SLIDE-3',
+          number: 3,
+          title: 'Independencia Estocástica',
+          keywords: ['independencia', 'independiente', 'independientes', 'factorización'],
+          bulletPoints: [
+            'A ⊥ B ⇔ P(A ∩ B) = P(A)·P(B)',
+            'Advertencia: Disjuntos (P>0) NO son independientes'
+          ]
+        },
+        {
+          id: 'SLIDE-4',
+          number: 4,
+          title: 'Probabilidad Total y Teorema de Bayes',
+          keywords: ['bayes', 'probabilidad total', 'partición', 'priori', 'posteriori', 'sensibilidad', 'especificidad', 'prevalencia'],
+          bulletPoints: [
+            'Actualización de creencias a priori ➔ a posteriori',
+            'Aplicaciones en test clínicos y detección de fallas'
+          ]
+        }
+      ]
+    },
     historicalClasses: [
       {
         id: 'HIST-P1',
@@ -95,6 +189,53 @@ export const COURSES_DB = {
     badgeColor: '#059669',
     description: 'Valorización de activos (CAPM), teoría de portafolios de Markowitz, WACC, evaluación de proyectos (VAN y TIR) y derivados.',
     glossary: 'CAPM, WACC, TIR, VAN, beta, riesgo sistemático, riesgo idiosincrático, diversificación, varianza del portafolio, correlación, retorno esperado, retorno exigido, tasa libre de riesgo, prima por riesgo de mercado, flujos de caja libres, swaps, FRAs.',
+    ucursosSync: {
+      synced: true,
+      sourceLabel: 'U-Cursos • Material Docente (Auto-Sync)',
+      deckTitle: 'Sesión 07 — Valorización CAPM, Portafolios y WACC.pptx',
+      slides: [
+        {
+          id: 'SLIDE-1',
+          number: 1,
+          title: 'Teoría de Portafolios y Diversificación',
+          keywords: ['portafolio', 'portafolios', 'correlación', 'varianza', 'diversificación', 'idiosincrático', 'rentabilidad'],
+          bulletPoints: [
+            'Combinar activos con ρ < 1 reduce σ² del portafolio',
+            'Riesgo idiosincrático se elimina diversificando'
+          ]
+        },
+        {
+          id: 'SLIDE-2',
+          number: 2,
+          title: 'Modelo CAPM y Riesgo Sistemático',
+          keywords: ['capm', 'beta', 'riesgo sistemático', 'libre de riesgo', 'prima por riesgo', 'retorno exigido', 'retorno esperado'],
+          bulletPoints: [
+            'E(R_i) = R_f + β_i (E(R_m) - R_f)',
+            'Beta mide únicamente riesgo sistemático, no riesgo total'
+          ]
+        },
+        {
+          id: 'SLIDE-3',
+          number: 3,
+          title: 'Valorización de Empresas (WACC)',
+          keywords: ['wacc', 'valorización', 'flujos de caja', 'financiamiento', 'costo promedio ponderado', 'deuda', 'patrimonio'],
+          bulletPoints: [
+            'WACC pondera costo de deuda (después de impuestos) y patrimonio',
+            'Consistencia entre flujo de caja libre de la firma y riesgo'
+          ]
+        },
+        {
+          id: 'SLIDE-4',
+          number: 4,
+          title: 'Criterios de Decisión: VAN vs. TIR',
+          keywords: ['van', 'tir', 'proyecto', 'crear valor', 'crea más valor', 'control'],
+          bulletPoints: [
+            'TIR alta ≠ mayor creación de valor monetario',
+            'VAN mide creación neta de riqueza descontada al costo de oportunidad'
+          ]
+        }
+      ]
+    },
     historicalClasses: [
       {
         id: 'HIST-F1',
@@ -182,4 +323,42 @@ export function addCourseMaterial(courseId, materialData) {
   };
   course.materials.push(newMaterial);
   return newMaterial;
+}
+
+/**
+ * Mapeo Automático Voz-a-Lámina con degradación elegante:
+ * Asocia un segmento hablado por el profesor con una lámina sincronizada de U-Cursos
+ * si hay coincidencia temática clara. Si no hay match o no hay PPT cargada, retorna null
+ * para que funcione sin fallar como contexto plano de pizarra libre.
+ */
+export function matchSlideForSegment(courseId, text) {
+  const course = getCourse(courseId);
+  const slides = course?.ucursosSync?.slides;
+  if (!slides || slides.length === 0 || !text) return null;
+
+  const low = text.toLowerCase();
+  let bestMatch = null;
+  let bestScore = 0;
+
+  for (const slide of slides) {
+    let score = 0;
+    for (const kw of slide.keywords || []) {
+      if (low.includes(kw.toLowerCase())) {
+        score += 1;
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = slide;
+    }
+  }
+
+  if (!bestMatch || bestScore === 0) return null;
+
+  return {
+    id: bestMatch.id,
+    number: bestMatch.number,
+    title: bestMatch.title,
+    bulletPoints: bestMatch.bulletPoints
+  };
 }
