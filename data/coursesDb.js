@@ -1,8 +1,9 @@
 /**
- * Base de Datos de Cursos y RAG Histórico Multiclase
- * Soporta Macroeconomía, Probabilidades e Ingeniería Financiera.
- * Permite cerrar clases y agregar dinámicamente resúmenes como contexto para la siguiente sesión.
+ * Base de Datos de Cursos, Materiales Dinámicos y RAG Histórico Multiclase.
+ * Soporta cursos base + creación de asignaturas personalizadas con degradación limpia a Pizarra Libre.
  */
+
+import { extractMeaningfulTokens, normalizeSearchText } from '../services/textUtils.js';
 
 export const COURSES_DB = {
   macro: {
@@ -377,34 +378,113 @@ export function addCourseMaterial(courseId, materialData) {
 }
 
 /**
- * Mapeo Automático Voz-a-Lámina con degradación elegante:
- * Asocia un segmento hablado por el profesor con una lámina sincronizada de U-Cursos
- * si hay coincidencia temática clara. Si no hay match o no hay PPT cargada, retorna null
- * para que funcione sin fallar como contexto plano de pizarra libre.
+ * Crea un curso personalizado al vuelo desde texto/slides opcionales.
+ * Si no se entrega material, arranca en modo Pizarra Libre sin fricción.
+ */
+export function createCustomCourse({ code = 'CURSO-101', name = 'Clase Personalizada', instructor = 'Docente', slidesText = '', glossary = '' }) {
+  const cleanCode = (code || 'CURSO-101').trim().toUpperCase().slice(0, 16);
+  const cleanName = (name || 'Clase Personalizada').trim().slice(0, 80);
+  const baseId = normalizeSearchText(cleanCode || cleanName).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'custom';
+  const id = COURSES_DB[baseId] ? `${baseId}_${Date.now().toString().slice(-4)}` : baseId;
+
+  const rawBlocks = (slidesText || '').trim()
+    ? (slidesText.includes('---')
+        ? slidesText.split(/^\s*---+\s*$/m)
+        : slidesText.split(/\n\s*\n+/))
+        .map(b => b.trim())
+        .filter(Boolean)
+    : [];
+
+  const slides = rawBlocks.map((block, idx) => {
+    const lines = block
+      .split('\n')
+      .map(l => l.replace(/^#+\s*/, '').replace(/^[-*•]\s*/, '').trim())
+      .filter(Boolean);
+    const title = (lines[0] || `Lámina ${idx + 1}`).replace(/^L[áa]mina\s*\d+\s*[:.-]?\s*/i, '').trim() || `Lámina ${idx + 1}`;
+    const bulletPoints = lines.length > 1 ? lines.slice(1, 6) : [title];
+    return {
+      id: `SLIDE-${idx + 1}`,
+      number: idx + 1,
+      title,
+      keywords: [],
+      bulletPoints
+    };
+  });
+
+  const inferredTokens = [...new Set(extractMeaningfulTokens(`${cleanName} ${slidesText}`, 4))].slice(0, 20);
+  const newCourse = {
+    id,
+    code: cleanCode,
+    name: cleanName,
+    instructor: (instructor || 'Docente').trim(),
+    badgeColor: '#3B82F6',
+    description: slides.length > 0
+      ? `Asignatura cargada dinámicamente con ${slides.length} láminas de apoyo.`
+      : 'Asignatura en modo Pizarra Libre (sin diapositivas previas).',
+    glossary: (glossary || '').trim() || inferredTokens.join(', '),
+    ucursosSync: slides.length > 0
+      ? {
+          synced: true,
+          sourceLabel: 'Material Cargado en Sesión',
+          deckTitle: `${cleanCode} — Láminas de Clase`,
+          slides
+        }
+      : {
+          synced: false,
+          sourceLabel: 'Pizarra Libre',
+          deckTitle: null,
+          slides: []
+        },
+    historicalClasses: [],
+    materials: [],
+    longitudinalInsights: null
+  };
+
+  COURSES_DB[id] = newCourse;
+  return newCourse;
+}
+
+/**
+ * Mapeo Automático Voz-a-Lámina agnóstico al curso:
+ * Evalúa tokens significativos de título y contenido de cada slide (además de keywords opcionales).
+ * Si no hay coincidencia clara o no hay PPT, retorna null (Pizarra Libre).
  */
 export function matchSlideForSegment(courseId, text) {
   const course = getCourse(courseId);
   const slides = course?.ucursosSync?.slides;
   if (!slides || slides.length === 0 || !text) return null;
 
-  const low = text.toLowerCase();
+  const normText = normalizeSearchText(text);
+  const textTokenSet = new Set(extractMeaningfulTokens(text, 3));
   let bestMatch = null;
   let bestScore = 0;
 
   for (const slide of slides) {
     let score = 0;
     for (const kw of slide.keywords || []) {
-      if (low.includes(kw.toLowerCase())) {
-        score += 1;
+      const normKw = normalizeSearchText(kw);
+      if (normKw && normText.includes(normKw)) {
+        score += 2;
       }
     }
+
+    const titleTokens = extractMeaningfulTokens(slide.title || '', 3);
+    for (const tt of titleTokens) {
+      if (textTokenSet.has(tt)) score += 2;
+    }
+
+    const bulletTokens = extractMeaningfulTokens((slide.bulletPoints || []).join(' '), 4);
+    for (const bt of bulletTokens) {
+      if (textTokenSet.has(bt)) score += 1;
+    }
+
     if (score > bestScore) {
       bestScore = score;
       bestMatch = slide;
     }
   }
 
-  if (!bestMatch || bestScore === 0) return null;
+  if (!bestMatch || bestScore < 2) return null;
 
   return {
     id: bestMatch.id,

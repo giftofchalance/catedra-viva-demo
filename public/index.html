@@ -3,49 +3,52 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cátedra Viva — Aula Aumentada con IA</title>
-  <link rel="stylesheet" href="/css/app.css">
+  <title>Cátedra Viva V4 — Aula Aumentada con IA</title>
+  <link rel="stylesheet" href="/css/app.css?v=10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <!-- KaTeX -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <style>
     .home-hero {
-      max-width: 860px;
+      max-width: 880px;
       margin: 2rem auto;
       text-align: center;
-      padding: 0 1rem;
+      padding: 0 16px;
+      width: 100%;
     }
     .home-hero h1 {
-      font-size: 2rem;
+      font-size: 28px;
       font-weight: 800;
-      letter-spacing: -0.03em;
-      margin-bottom: 0.5rem;
+      letter-spacing: -0.025em;
+      margin-bottom: 8px;
     }
     .home-hero p {
       color: var(--text-muted);
-      font-size: 1.05rem;
-      margin-bottom: 2rem;
+      font-size: 14px;
+      margin-bottom: 24px;
+      max-width: 620px;
+      margin-inline: auto;
     }
     .course-selector-box {
       background: var(--surface);
       border: 1px solid var(--surface-border);
       border-radius: var(--radius);
-      padding: 1.25rem;
-      margin-bottom: 2rem;
+      padding: 16px;
+      margin-bottom: 20px;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 10px;
       text-align: left;
+      box-shadow: var(--shadow);
     }
     .role-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-      margin-bottom: 2rem;
+      gap: 14px;
+      margin-bottom: 24px;
     }
     @media (max-width: 680px) {
       .role-grid { grid-template-columns: 1fr; }
@@ -54,43 +57,28 @@
       background: var(--surface);
       border: 1px solid var(--border-default);
       border-radius: var(--radius);
-      padding: 1.75rem 1.4rem;
-      text-align: center;
+      padding: 22px 18px;
+      text-align: left;
       text-decoration: none;
       color: var(--text);
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 0.75rem;
+      gap: 10px;
       box-shadow: var(--shadow);
       transition: background-color 140ms var(--ease-out-quart), border-color 140ms var(--ease-out-quart), transform 100ms var(--ease-out-quart);
     }
-    .role-card:hover {
-      background: var(--surface-2);
-      border-color: var(--primary);
-    }
-    .role-card:active {
-      transform: scale(0.98);
-    }
+    .role-card:hover { background: var(--surface-2); border-color: var(--primary); }
+    .role-card:active { transform: scale(0.98); }
     .role-icon {
-      font-size: 3rem;
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-sm);
       background: var(--surface-2);
-      width: 80px;
-      height: 80px;
-      display: flex;
+      border: 1px solid var(--border-subtle);
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: 50%;
-      border: 1px solid var(--surface-border);
-    }
-    .role-card h2 {
-      font-size: 1.3rem;
-      margin: 0;
-    }
-    .role-card p {
-      font-size: 0.88rem;
-      color: var(--text-muted);
-      margin: 0;
+      color: #93C5FD;
     }
   </style>
 </head>
@@ -98,99 +86,115 @@
 
   <header class="topbar">
     <div class="brand-wrap">
-      <span class="brand-icon">🏛️</span>
-      <div>
-        <div class="brand-title">Cátedra Viva</div>
-        <div class="brand-subtitle">Aula Aumentada con IA • Prototipo Oficial</div>
+      <span class="brand-icon" data-icon="graduation" data-size="17"></span>
+      <div class="brand-meta">
+        <span class="brand-title">Cátedra Viva</span>
+        <span class="brand-subtitle">Co-Piloto de Aula V4 · Presencial y Zoom/Meet</span>
       </div>
     </div>
     <div class="topbar-actions">
-      <a href="/simulador" class="btn btn-outline" style="font-size: 0.8rem;">
-        🧪 Simulación Dual
+      <a href="/simulador" class="btn btn-outline btn-sm">
+        <span class="icon-slot" data-icon="layers" data-size="14"></span>
+        <span>Laboratorio Tri-Rol</span>
       </a>
     </div>
   </header>
 
   <main class="home-hero">
     <h1>¿Cómo entras a la clase hoy?</h1>
-    <p>Transcripción neuronal en vivo, tutor socrático con citas directas al minuto de la clase y panel docente con métricas Read.ai.</p>
+    <p>Transcripción en vivo con audio efímero, tutor pedagógico sin perder la oportunidad de preguntar y radar anónimo para profesor y auxiliar.</p>
 
-    <!-- Selector de Asignatura Activa -->
     <div class="course-selector-box">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
         <div>
-          <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Asignatura Activa</span>
-          <h3 id="courseDisplayTitle" style="font-size: 1.15rem; margin-top: 0.15rem;">Cargando...</h3>
+          <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Asignatura Activa</span>
+          <h2 id="courseDisplayTitle" style="font-size: 16px; margin-top: 2px;">Cargando...</h2>
         </div>
-        <select id="courseSelect" class="btn btn-outline" style="min-width: 260px; font-weight: 600;">
-          <option value="macro">IN4123 — Macroeconomía (IS-LM)</option>
-          <option value="probabilidades">IN3401 — Probabilidades y Bayes</option>
-          <option value="finanzas">IN5233 — Finanzas, Tasas y Swaps</option>
+        <select id="courseSelect" class="btn btn-outline" style="min-width: 280px; font-weight: 600;">
+          <option value="macro">IN4123 — Macroeconomía Intermedia</option>
+          <option value="probabilidades">IN3401 — Probabilidades y Estadística</option>
+          <option value="finanzas">IN5233 — Finanzas (CAPM, WACC, VAN/TIR)</option>
         </select>
       </div>
-      <p id="courseDesc" style="font-size: 0.85rem; color: var(--text-muted); margin: 0;"></p>
-      
-      <!-- Resumen RAG Histórico de la Asignatura -->
-      <details class="bridge-box" style="margin-top: 0.5rem;">
-        <summary>📚 Ver Memoria Histórica del Curso (Clases previas archivadas)</summary>
-        <div id="historicalClassesList" style="margin-top: 0.5rem; font-size: 0.84rem; display: flex; flex-direction: column; gap: 0.5rem;"></div>
+      <p id="courseDesc" style="font-size: 13px; color: var(--text-muted); margin: 0;"></p>
+
+      <details class="bridge-box" style="margin: 4px 0 0 0;">
+        <summary>Memoria Histórica del Curso (Clases previas archivadas)</summary>
+        <div id="historicalClassesList" style="margin-top: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 6px;"></div>
       </details>
     </div>
 
-    <!-- Selección de Rol -->
     <div class="role-grid">
       <a href="/profesor" class="role-card">
-        <div class="role-icon">🎙️</div>
-        <h2>Soy Profesor / Ayudante</h2>
-        <p>Usa este teléfono o laptop como micrófono. Verás el ritmo PPM (Read.ai), control del chatbot en vivo (Modo Pizarra) y avisos de "me perdí".</p>
-        <span class="btn btn-primary" style="margin-top: 0.5rem; width: 100%;">Abrir Panel Docente ➔</span>
+        <div class="role-icon" data-icon="mic" data-size="20"></div>
+        <h2 style="font-size: 16px;">Soy Profesor / Auxiliar</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0; flex: 1;">
+          Inicia la sala en 1 clic (micrófono o Zoom/Meet), proyecta el QR y recibe señales anónimas de comprensión sin sobrecargar la clase.
+        </p>
+        <span class="btn btn-primary" style="width: 100%;">Abrir Panel Docente</span>
       </a>
 
       <a href="/estudiante" class="role-card">
-        <div class="role-icon">🎓</div>
-        <h2>Soy Estudiante</h2>
-        <p>Sigue la transcripción en tiempo real, toca cualquier frase para rebobinarla y haz preguntas al Tutor Socrático con citas al minuto exacto.</p>
-        <span class="btn btn-primary" style="margin-top: 0.5rem; width: 100%; background: linear-gradient(135deg, #059669, #047857);">Entrar al Aula ➔</span>
+        <div class="role-icon" data-icon="graduation" data-size="20" style="color:#6EE7B7;"></div>
+        <h2 style="font-size: 16px;">Soy Estudiante</h2>
+        <p style="font-size: 13px; color: var(--text-muted); margin: 0; flex: 1;">
+          Sigue la clase en vivo, cita cualquier frase o respuesta previa para profundizar y envía señales anónimas si el ritmo sube.
+        </p>
+        <span class="btn btn-success" style="width: 100%;">Entrar al Aula</span>
       </a>
     </div>
 
-    <div style="font-size: 0.82rem; color: var(--text-dim);">
-      Cátedra Viva V2 • Desarrollado para IN5524 Aplicaciones de la IA en Educación • FCFM Universidad de Chile
+    <div style="font-size: 12px; color: var(--text-dim);">
+      Cátedra Viva V4 · FCFM Universidad de Chile · Audio Efímero 0s · Anonimato en 2 Capas
     </div>
   </main>
 
-  <script>
+  <script type="module">
+    import { hydrateSvgIcons, escapeHtml } from '/js/icons.js';
+
+    async function refreshCourses(activeId) {
+      const data = await fetch('/api/courses').then(r => r.json());
+      const select = document.getElementById('courseSelect');
+      select.innerHTML = '';
+      (data.courses || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.code} — ${c.name}`;
+        if (c.id === (activeId || data.activeCourseId)) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
     async function loadCourseInfo() {
       try {
-        const res = await fetch('/api/live/state');
-        const state = await res.json();
+        const state = await fetch('/api/live/state').then(r => r.json());
         const course = state.course;
+        await refreshCourses(course.id);
 
-        document.getElementById('courseSelect').value = course.id;
         document.getElementById('courseDisplayTitle').textContent = `${course.code}: ${course.name}`;
-        document.getElementById('courseDesc').textContent = `${course.description} • Dictado por: ${course.instructor}`;
+        document.getElementById('courseDesc').textContent = `${course.description} · ${course.instructor}`;
 
         const histList = document.getElementById('historicalClassesList');
         histList.innerHTML = '';
+        if (!course.historicalClasses?.length) {
+          histList.innerHTML = '<div style="color:var(--text-muted);">Sin sesiones cerradas previas. Se guardarán automáticamente al terminar clase.</div>';
+          return;
+        }
         course.historicalClasses.forEach(hc => {
           const item = document.createElement('div');
-          item.style.background = 'rgba(15, 23, 42, 0.4)';
-          item.style.padding = '0.5rem 0.75rem';
-          item.style.borderRadius = '6px';
+          item.style.cssText = 'background:var(--surface); padding:8px 10px; border-radius:6px;';
           item.innerHTML = `
-            <strong>${hc.title}</strong>
-            <p style="margin: 0.2rem 0; color: var(--text-muted);">${hc.summary}</p>
-            <div style="color: #6EE7B7; font-family: var(--font-mono); font-size: 0.78rem;">
-              Fórmulas base: ${(hc.keyFormulas || []).map(f => `$${f}$`).join(' • ')}
+            <strong>${escapeHtml(hc.title)}</strong>
+            <p style="margin:4px 0; color:var(--text-muted); font-size:12px;">${escapeHtml(hc.summary)}</p>
+            <div style="color:#6EE7B7; font-family:var(--font-mono); font-size:12px;">
+              ${(hc.keyFormulas || []).map(f => `$${escapeHtml(f)}$`).join(' · ')}
             </div>
           `;
           histList.appendChild(item);
         });
 
         if (window.renderMathInElement) {
-          window.renderMathInElement(histList, {
-            delimiters: [{ left: '$', right: '$', display: false }]
-          });
+          window.renderMathInElement(histList, { delimiters: [{ left: '$', right: '$', display: false }], throwOnError: false });
         }
       } catch (err) {
         console.error('Error cargando cursos:', err);
@@ -198,16 +202,18 @@
     }
 
     document.getElementById('courseSelect').addEventListener('change', async (e) => {
-      const courseId = e.target.value;
       await fetch('/api/courses/select', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ courseId })
+        body: JSON.stringify({ courseId: e.target.value })
       });
       loadCourseInfo();
     });
 
-    window.addEventListener('DOMContentLoaded', loadCourseInfo);
+    window.addEventListener('DOMContentLoaded', () => {
+      hydrateSvgIcons();
+      loadCourseInfo();
+    });
   </script>
 </body>
 </html>

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cátedra Viva V3 — Laboratorio Tri-Rol en 1 Pantalla</title>
-  <link rel="stylesheet" href="/css/app.css?v=6">
+  <title>Cátedra Viva V4 — Laboratorio Tri-Rol</title>
+  <link rel="stylesheet" href="/css/app.css?v=10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
       flex-shrink: 0;
     }
     .trirole-grid {
@@ -36,49 +36,58 @@
     }
     @media (max-width: 1080px) {
       .trirole-grid { grid-template-columns: 1fr; }
+      body.sim-page.app-viewport-locked { height: auto; max-height: none; overflow-y: auto; }
     }
   </style>
 </head>
-<body class="app-viewport-locked">
+<body class="sim-page app-viewport-locked">
 
   <header class="topbar">
-    <div class="brand-wrap">
-      <a href="/" class="brand-icon" style="text-decoration:none; color:inherit;">🧪</a>
-      <div>
-        <div class="brand-title">Laboratorio Tri-Rol (Profe • Auxiliar • Estudiante)</div>
-        <div class="brand-subtitle">Prueba integrada en vivo con audio real, U-Cursos Sync y Tokenomics sin sesgo</div>
+    <a href="/" class="brand-wrap">
+      <span class="brand-icon" data-icon="layers" data-size="16"></span>
+      <div class="brand-meta">
+        <span class="brand-title">Laboratorio Tri-Rol</span>
+        <span class="brand-subtitle">Profesor · Radar Auxiliar · Estudiante en 1 pantalla</span>
       </div>
-    </div>
+    </a>
     <div class="topbar-actions">
-      <button id="simCapsuleBtn" class="btn btn-outline btn-xs">📘 Ver Apunte Vivo &amp; Pauta TA</button>
-      <a href="/profesor" class="btn btn-outline btn-xs">🎙️ Panel Profe</a>
-      <a href="/estudiante" class="btn btn-outline btn-xs">🎓 Estudiante</a>
-      <a href="/" class="btn btn-outline btn-xs">🏠 Portada</a>
+      <button id="simCapsuleBtn" type="button" class="btn btn-outline btn-sm">
+        <span class="icon-slot" data-icon="book" data-size="14"></span>
+        <span>Apunte y Pauta</span>
+      </button>
+      <a href="/profesor" class="btn btn-outline btn-sm">Panel Profe</a>
+      <a href="/estudiante" class="btn btn-outline btn-sm">Vista Alumno</a>
     </div>
   </header>
 
-  <!-- Barra de Control de Simulación -->
+  <!-- Barra de Control Simétrica de 1 Fila -->
   <div class="trirole-bar">
     <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-      <select id="simCourseSelect" class="btn btn-outline btn-xs" style="font-weight:600; font-size:0.78rem;">
+      <select id="simCourseSelect" class="btn btn-outline btn-sm" style="font-weight:600;">
         <option value="macro">IN4123 — Macroeconomía (IS-LM)</option>
         <option value="probabilidades">IN3401 — Probabilidades y Bayes</option>
         <option value="finanzas">IN5233 — Finanzas (CAPM, WACC, VAN/TIR)</option>
       </select>
-      <button id="btnStep" class="btn btn-primary btn-xs">▶ Avanzar +7s Audio</button>
-      <button id="btnAuto" class="btn btn-outline btn-xs">⚡ Auto-Stream</button>
-      <button id="btnEndQuick" class="btn btn-purple btn-xs">🏁 Terminar Clase (Full IA)</button>
-      <button id="btnReset" class="btn btn-danger btn-xs">🔄 Reiniciar</button>
+      <button id="btnStep" type="button" class="btn btn-primary btn-sm">
+        <span class="icon-slot" data-icon="play" data-size="13"></span>
+        <span>+7s Audio</span>
+      </button>
+      <button id="btnAuto" type="button" class="btn btn-outline btn-sm">Auto-Stream</button>
+      <button id="btnEndQuick" type="button" class="btn btn-purple btn-sm">
+        <span class="icon-slot" data-icon="flag" data-size="13"></span>
+        <span>Terminar Clase</span>
+      </button>
+      <button id="btnReset" type="button" class="btn btn-danger btn-sm">Reiniciar</button>
     </div>
 
-    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <div class="segmented-control" id="simModeControl" style="min-width: 315px;">
-        <button type="button" class="seg-btn" data-mode="paused" style="white-space:nowrap;">🟡 Pizarra</button>
-        <button type="button" class="seg-btn active" data-mode="active" style="white-space:nowrap;">🟢 Seguimiento</button>
-        <button type="button" class="seg-btn" data-mode="full_ia" style="white-space:nowrap;">🟣 Full IA</button>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="segmented-control" id="simModeControl" style="width: 300px;">
+        <button type="button" class="seg-btn" data-mode="paused">Pizarra</button>
+        <button type="button" class="seg-btn active" data-mode="active">Seguimiento</button>
+        <button type="button" class="seg-btn" data-mode="full_ia">Full IA</button>
       </div>
-      <div class="tabular-nums" style="font-family:var(--font-mono); font-size:0.8rem; white-space:nowrap;">
-        ⏱ <strong id="simTime" style="color:#38BDF8;">00:00</strong> • <strong id="simWpm">0 PPM</strong>
+      <div class="tabular-nums" style="font-family:var(--font-mono); font-size:13px; white-space:nowrap;">
+        <strong id="simTime" style="color:#38BDF8;">00:00</strong> · <strong id="simWpm">0 PPM</strong>
       </div>
     </div>
   </div>
@@ -87,12 +96,12 @@
     <!-- COL 1: PROFESOR -->
     <section class="card col-panel">
       <div class="card-header">
-        <span class="card-title">🎙️ 1. Voz del Profesor &amp; Slides U-Cursos</span>
-        <span id="simPrivacyBadge" class="tabular-nums" style="font-size:0.7rem; color:#6EE7B7;">🛡️ 0 borrados</span>
+        <span class="card-title">1. Voz en Sala y Láminas</span>
+        <span id="simPrivacyBadge" class="tabular-nums" style="font-size:12px; color:#6EE7B7;">0 borrados</span>
       </div>
       <div id="simFeed" class="feed-box">
-        <div style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:0.82rem;">
-          Pulsa <strong>"▶ Avanzar +7s Audio"</strong> para transcribir audio real del ramo seleccionado y mapearlo automáticamente a las láminas.
+        <div id="simEmptyFeed" style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:13px;">
+          Pulsa <strong>"+7s Audio"</strong> para transcribir fragmentos reales del curso y citarlos al instante.
         </div>
       </div>
     </section>
@@ -100,39 +109,46 @@
     <!-- COL 2: AUXILIAR / RADAR -->
     <section class="card col-panel">
       <div class="card-header">
-        <span class="card-title">📡 2. Radar Auxiliar</span>
-        <span id="simTokenBadge" class="tabular-nums" style="font-size:0.7rem; color:#C4B5FD; white-space:nowrap;">⚡ 0 tok ahorrados</span>
+        <span class="card-title">2. Radar Profe y Auxiliar</span>
+        <span id="simTokenBadge" class="tabular-nums" style="font-size:12px; color:#DDD6FE;">0 tok ahorrados</span>
       </div>
       <div id="simClustersBox" class="feed-box" style="gap:8px;">
-        <div style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:0.82rem;">
-          Los clusters de dudas y pulsos ("Me perdí", "Muy rápido") aparecerán aquí agrupados, y se auto-resolverán cuando el profe hable del tema.
+        <div style="text-align:center; color:var(--text-muted); padding:2rem 1rem; font-size:13px;">
+          Los tópicos agrupados aparecerán aquí y se auto-resolverán cuando el profesor los retome en voz alta.
         </div>
       </div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; padding-top:8px; border-top:1px solid var(--border-subtle); flex-shrink:0;">
-        <button id="simPulseLost" class="btn btn-lost btn-xs">⚡ Simular "Me perdí"</button>
-        <button id="simPulseFast" class="btn btn-outline btn-xs" style="color:#93C5FD;">🐢 Simular "Muy rápido"</button>
+        <button id="simPulseLost" type="button" class="btn btn-lost btn-sm">Simular "Me perdí"</button>
+        <button id="simPulseFast" type="button" class="btn btn-outline btn-sm" style="color:#93C5FD;">Simular "Más lento"</button>
       </div>
     </section>
 
     <!-- COL 3: ESTUDIANTE -->
     <section class="card col-panel">
       <div class="card-header">
-        <span class="card-title">🎓 3. Vista Estudiante (Co-Piloto)</span>
-        <span id="simStudentModePill" class="conn-pill" style="padding:2px 8px; font-size:0.68rem;">🟢 Seguimiento</span>
+        <span class="card-title">3. Co-Piloto Estudiante</span>
+        <span id="simStudentModePill" class="conn-pill">Seguimiento</span>
       </div>
 
-      <div id="simQuickChips" class="chips-wrap" style="margin-bottom:6px; flex-shrink:0;"></div>
+      <div id="simQuickChips" class="chips-wrap"></div>
 
       <div id="simChatMessages" class="chat-messages">
         <div class="msg-row msg-assistant">
           <div class="msg-meta"><span style="font-weight:700; color:#6EE7B7;">CO-PILOTO DE AULA</span></div>
-          <div style="font-size:0.84rem;">Haz clic en un chip o escribe una pregunta para probar Modo Seguimiento (2–3 líneas + Voz Alta), Guardia Anti-Sesgo de Caché o Modo Full IA.</div>
+          <div style="font-size:13px;">Prueba los chips, citas clicables, Quote-Reply o las diferencias entre Seguimiento, Full IA en vivo y Post-Clase.</div>
         </div>
       </div>
 
+      <div id="simQuoteBar" class="quote-composer-bar">
+        <span id="simQuoteText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></span>
+        <button id="simClearQuote" type="button" class="btn btn-ghost btn-xs" aria-label="Quitar cita">
+          <span class="icon-slot" data-icon="close" data-size="13"></span>
+        </button>
+      </div>
+
       <form id="simChatForm" class="chat-form">
-        <input id="simChatInput" type="text" class="chat-input" placeholder="Pregunta como estudiante...">
-        <button type="submit" class="btn btn-primary btn-xs" style="padding:0 12px;">Preguntar ➔</button>
+        <input id="simChatInput" type="text" class="chat-input" placeholder="Pregunta o cita una respuesta...">
+        <button type="submit" class="btn btn-primary btn-sm">Preguntar</button>
       </form>
     </section>
   </main>
@@ -141,17 +157,23 @@
   <div id="simCapsuleModal" class="modal-overlay">
     <div class="modal-card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
-        <h3 style="font-size:1rem;">📘 Apunte Vivo Fusionado &amp; Pauta del Auxiliar</h3>
-        <button id="simCloseCapsule" class="btn btn-outline btn-xs">Cerrar</button>
+        <h3 style="font-size:16px;">Apunte Vivo Fusionado y Pauta Auxiliar</h3>
+        <button id="simCloseCapsule" type="button" class="btn btn-outline btn-xs">Cerrar</button>
       </div>
-      <div id="simCapsuleBody" style="display:flex; flex-direction:column; gap:10px; font-size:0.83rem;"></div>
+      <div id="simCapsuleBody" style="display:flex; flex-direction:column; gap:10px; font-size:13px;"></div>
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { icon, hydrateSvgIcons, escapeHtml, formatMarkdownSafe, showToast, connectLiveStateSync } from '/js/icons.js';
+
     let simSec = 0;
     let isAuto = false;
     let autoInterval = null;
+    let currentEntries = [];
+    let simHistory = [];
+    let simQuote = null;
+    let lastSimSig = '';
 
     const simCourseSelect = document.getElementById('simCourseSelect');
     const btnStep = document.getElementById('btnStep');
@@ -161,12 +183,16 @@
     const simTime = document.getElementById('simTime');
     const simWpm = document.getElementById('simWpm');
     const simFeed = document.getElementById('simFeed');
+    const simEmptyFeed = document.getElementById('simEmptyFeed');
     const simClustersBox = document.getElementById('simClustersBox');
     const simPrivacyBadge = document.getElementById('simPrivacyBadge');
     const simTokenBadge = document.getElementById('simTokenBadge');
     const simModeControl = document.getElementById('simModeControl');
     const simStudentModePill = document.getElementById('simStudentModePill');
     const simChatMessages = document.getElementById('simChatMessages');
+    const simQuoteBar = document.getElementById('simQuoteBar');
+    const simQuoteText = document.getElementById('simQuoteText');
+    const simClearQuote = document.getElementById('simClearQuote');
     const simChatForm = document.getElementById('simChatForm');
     const simChatInput = document.getElementById('simChatInput');
     const simQuickChips = document.getElementById('simQuickChips');
@@ -175,7 +201,8 @@
       macro: [
         { label: 'Curva IS', q: '¿Qué representa la curva IS y por qué tiene pendiente negativa?' },
         { label: 'Negación IS', q: '¿Por qué la curva IS no tiene pendiente positiva?' },
-        { label: 'Off-topic', q: '¿Quién ganó el mundial?' }
+        { label: 'TPM Chile', q: '¿Si el Banco Central sube la TPM se desplaza IS o LM?' },
+        { label: 'Off-topic', q: '¿Me recomiendas una serie de Netflix?' }
       ],
       probabilidades: [
         { label: 'Bayes', q: '¿Cuál es la fórmula del Teorema de Bayes?' },
@@ -189,27 +216,56 @@
       ]
     };
 
+    function setSimQuote(quoteObj) {
+      simQuote = quoteObj;
+      const preview = quoteObj.text.replace(/\s+/g, ' ').trim();
+      simQuoteText.textContent = `Citando ${quoteObj.label}: "${preview.slice(0, 64)}${preview.length > 64 ? '...' : ''}"`;
+      simQuoteBar.classList.add('active');
+      simChatInput.focus();
+    }
+
+    function clearSimQuote() {
+      simQuote = null;
+      simQuoteBar.classList.remove('active');
+      simQuoteText.textContent = '';
+    }
+
+    async function refreshSimCourses(activeId) {
+      const data = await fetch('/api/courses').then(r => r.json());
+      simCourseSelect.innerHTML = '';
+      (data.courses || []).forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.code} — ${c.name}`;
+        if (c.id === (activeId || data.activeCourseId)) opt.selected = true;
+        simCourseSelect.appendChild(opt);
+      });
+    }
+
     async function initSim() {
+      hydrateSvgIcons();
       await syncState();
       renderChips();
-      setInterval(syncState, 3000);
+      connectLiveStateSync(syncState);
 
       btnStep.addEventListener('click', stepAudio);
       btnAuto.addEventListener('click', toggleAuto);
       btnReset.addEventListener('click', resetSim);
+      simClearQuote.addEventListener('click', clearSimQuote);
+
       btnEndQuick.addEventListener('click', async () => {
         if (isAuto) toggleAuto();
         await fetch('/api/teacher/close-class', { method: 'POST' });
         await syncState();
+        showToast('Clase finalizada · Modo Post-Clase Full IA activo', 'success');
         openSimCapsule();
       });
 
       simModeControl.querySelectorAll('.seg-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-          const mode = btn.getAttribute('data-mode');
           await fetch('/api/teacher/settings', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chatState: mode })
+            body: JSON.stringify({ chatState: btn.getAttribute('data-mode') })
           });
           syncState();
         });
@@ -243,6 +299,8 @@
           body: JSON.stringify({ courseId: e.target.value })
         });
         simSec = 0;
+        simHistory = [];
+        lastSimSig = '';
         simTime.textContent = '00:00';
         renderChips();
         syncState();
@@ -277,8 +335,6 @@
         simTime.textContent = formatSec(simSec);
         if (data.pace) simWpm.textContent = `${data.pace.currentWpm} PPM`;
         await syncState();
-      } catch (err) {
-        console.warn('Error en step:', err);
       } finally {
         btnStep.disabled = false;
       }
@@ -287,12 +343,12 @@
     function toggleAuto() {
       if (isAuto) {
         isAuto = false;
-        btnAuto.textContent = '⚡ Auto-Stream';
+        btnAuto.textContent = 'Auto-Stream';
         btnAuto.classList.remove('btn-danger');
         clearInterval(autoInterval);
       } else {
         isAuto = true;
-        btnAuto.textContent = '⏹ Detener';
+        btnAuto.textContent = 'Detener';
         btnAuto.classList.add('btn-danger');
         stepAudio();
         autoInterval = setInterval(stepAudio, 6500);
@@ -303,6 +359,8 @@
       if (isAuto) toggleAuto();
       await fetch('/api/live/reset', { method: 'POST' });
       simSec = 0;
+      simHistory = [];
+      lastSimSig = '';
       simTime.textContent = '00:00';
       await syncState();
     }
@@ -310,6 +368,9 @@
     async function syncState() {
       try {
         const state = await fetch('/api/live/state').then(r => r.json());
+        if (!Array.from(simCourseSelect.options).some(o => o.value === state.course.id)) {
+          await refreshSimCourses(state.course.id);
+        }
         simCourseSelect.value = state.course.id;
         simSec = Math.max(simSec, state.elapsedSeconds || 0);
         simTime.textContent = formatSec(simSec);
@@ -320,35 +381,56 @@
           b.classList.toggle('active', b.getAttribute('data-mode') === mode);
         });
         simStudentModePill.className = 'conn-pill';
-        if (mode === 'paused') { simStudentModePill.classList.add('warn'); simStudentModePill.textContent = '🟡 Pizarra'; }
-        else if (mode === 'full_ia') { simStudentModePill.classList.add('full-ia'); simStudentModePill.textContent = '🟣 Full IA'; }
-        else { simStudentModePill.textContent = '🟢 Seguimiento'; }
+        if (state.classClosed) {
+          simStudentModePill.classList.add('full-ia');
+          simStudentModePill.textContent = 'Post-Clase · Full IA';
+        } else if (mode === 'paused') {
+          simStudentModePill.classList.add('warn');
+          simStudentModePill.textContent = 'En vivo · Pizarra';
+        } else if (mode === 'full_ia') {
+          simStudentModePill.classList.add('full-ia');
+          simStudentModePill.textContent = 'En vivo · Full IA';
+        } else {
+          simStudentModePill.textContent = 'En vivo · Seguimiento';
+        }
 
         const tk = state.tokenomics || {};
-        simPrivacyBadge.textContent = `🛡️ ${tk.ephemeralChunksDeleted || 0} borrados`;
+        simPrivacyBadge.textContent = `${tk.ephemeralChunksDeleted || 0} borrados`;
         const savedK = tk.prefixTokensSaved >= 1000 ? `${(tk.prefixTokensSaved / 1000).toFixed(1)}k` : (tk.prefixTokensSaved || 0);
-        simTokenBadge.textContent = `⚡ ${savedK} tok (${tk.cacheHits || 0} hits)`;
+        simTokenBadge.textContent = `${savedK} tok (${tk.cacheHits || 0} hits)`;
 
-        const entries = state.entries || [];
-        if (entries.length > 0) {
-          simFeed.innerHTML = '';
-          entries.forEach(entry => {
-            const card = document.createElement('div');
-            card.className = 'feed-item';
-            card.id = `entry-${entry.id}`;
-            const slideBadge = entry.slideRef ? `<span class="tag-badge tag-slide">📑 Lám. ${entry.slideRef.number}</span>` : '';
-            const catClass = entry.category === 'importancia' ? 'tag-emphasis' : entry.category === 'formula' ? 'tag-formula' : 'tag-concept';
-            const catLabel = entry.category === 'importancia' ? 'Ojo Control' : entry.category === 'formula' ? 'Fórmula' : entry.category === 'digresion' ? 'Digresión' : 'Concepto';
-            card.innerHTML = `
-              <div class="feed-meta">
-                <div><span class="feed-time">[${entry.timestamp}]</span> <span style="color:var(--text-muted);">${entry.speaker}</span></div>
-                <div style="display:flex; gap:4px;">${slideBadge}<span class="tag-badge ${catClass}">${catLabel}</span></div>
-              </div>
-              <div style="font-size:0.84rem;">${entry.text}</div>
-            `;
-            simFeed.appendChild(card);
-          });
-          simFeed.scrollTop = simFeed.scrollHeight;
+        currentEntries = state.entries || [];
+        const feedSig = currentEntries.map(e => `${e.id}:${e.text.length}`).join('|');
+        if (feedSig !== lastSimSig) {
+          lastSimSig = feedSig;
+          const isNearBottom = (simFeed.scrollHeight - simFeed.scrollTop - simFeed.clientHeight) < 90;
+          if (currentEntries.length === 0) {
+            simFeed.querySelectorAll('.feed-item').forEach(n => n.remove());
+            simEmptyFeed.style.display = 'block';
+          } else {
+            simEmptyFeed.style.display = 'none';
+            simFeed.querySelectorAll('.feed-item').forEach(n => n.remove());
+            currentEntries.forEach(entry => {
+              const card = document.createElement('div');
+              card.className = 'feed-item';
+              card.id = `entry-${entry.id}`;
+              const slideBadge = entry.slideRef ? `<span class="tag-badge tag-slide">Lám. ${entry.slideRef.number}</span>` : '';
+              const catClass = entry.category === 'importancia' ? 'tag-emphasis' : entry.category === 'formula' ? 'tag-formula' : entry.category === 'ejemplo' ? 'tag-example' : 'tag-concept';
+              const catLabel = entry.category === 'importancia' ? 'Ojo Control' : entry.category === 'formula' ? 'Fórmula' : entry.category === 'ejemplo' ? 'Ejemplo' : 'Concepto';
+              card.innerHTML = `
+                <div class="feed-meta">
+                  <div><span class="feed-time">[${escapeHtml(entry.timestamp)}]</span> <span style="color:var(--text-muted);">${escapeHtml(entry.speaker)}</span></div>
+                  <div style="display:flex; gap:4px;">${slideBadge}<span class="tag-badge ${catClass}">${catLabel}</span></div>
+                </div>
+                <div style="font-size:13px;">${escapeHtml(entry.text)}</div>
+              `;
+              card.addEventListener('click', () => {
+                setSimQuote({ type: 'transcript', refId: entry.id, label: `Min ${entry.timestamp}`, text: entry.text });
+              });
+              simFeed.appendChild(card);
+            });
+            if (isNearBottom) simFeed.scrollTop = simFeed.scrollHeight;
+          }
         }
 
         const clusters = state.topicClusters || [];
@@ -359,14 +441,14 @@
             const card = document.createElement('div');
             card.className = `cluster-card ${isRes ? 'is-resolved' : c.status === 'for_ta' ? 'is-ta' : ''}`;
             const statusTxt = c.status === 'auto_resolved'
-              ? `✓ Retomado por profe [${c.resolvedAt || ''}]`
-              : c.status === 'resolved' ? '✓ Aclarado' : c.status === 'for_ta' ? '📌 Ayudantía' : `🔥 ×${c.count} señales`;
+              ? `Retomado [${escapeHtml(c.resolvedAt || '')}]`
+              : c.status === 'resolved' ? 'Aclarado' : c.status === 'for_ta' ? 'Ayudantía' : `×${c.count} señales`;
             card.innerHTML = `
-              <div style="display:flex; justify-content:space-between; font-size:0.74rem; font-weight:700;">
-                <span>${c.label}</span>
+              <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:700;">
+                <span>${escapeHtml(c.label)}</span>
                 <span style="color:${isRes ? '#6EE7B7' : '#FCD34D'};">${statusTxt}</span>
               </div>
-              <div style="font-size:0.71rem; color:var(--text-muted);">${c.suggestion}</div>
+              <div style="font-size:12px; color:var(--text-muted);">${escapeHtml(c.suggestion)}</div>
             `;
             simClustersBox.appendChild(card);
           });
@@ -378,56 +460,81 @@
       if (e) e.preventDefault();
       const q = (customQ || simChatInput.value).trim();
       if (!q) return;
-      if (!customQ) simChatInput.value = '';
+
+      const quoteToSend = customQ ? null : simQuote;
+      if (!customQ) {
+        simChatInput.value = '';
+        clearSimQuote();
+      }
 
       const userRow = document.createElement('div');
       userRow.className = 'msg-row msg-user';
-      userRow.textContent = q;
+      userRow.innerHTML = `${quoteToSend ? `<div class="msg-user-quote">Sobre ${escapeHtml(quoteToSend.label)}</div>` : ''}<div>${escapeHtml(q)}</div>`;
       simChatMessages.appendChild(userRow);
+      simHistory.push({ role: 'user', text: q });
 
       const loadingRow = document.createElement('div');
       loadingRow.className = 'msg-row msg-assistant';
-      loadingRow.innerHTML = `<span class="dot-pulse"></span> Procesando consulta...`;
+      loadingRow.innerHTML = `<span class="dot-pulse"></span> Procesando...`;
       simChatMessages.appendChild(loadingRow);
       simChatMessages.scrollTop = simChatMessages.scrollHeight;
 
       try {
         const data = await fetch('/api/chat', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q, currentTimeFormatted: formatSec(simSec), bypassCache })
+          body: JSON.stringify({
+            question: q,
+            currentTimeFormatted: formatSec(simSec),
+            bypassCache,
+            quotedContext: quoteToSend,
+            chatHistory: simHistory.slice(0, -1).slice(-4)
+          })
         }).then(r => r.json());
         loadingRow.remove();
 
+        simHistory.push({ role: 'assistant', text: data.answer || '' });
+
         const row = document.createElement('div');
         row.className = 'msg-row msg-assistant';
-        if (data.questionType === 'off_topic') row.style.borderLeft = '3px solid #EF4444';
+        if (data.questionType === 'off_topic') row.style.borderLeft = '3px solid var(--danger)';
 
-        let html = (data.answer || '')
-          .replace(/^---+\s*$/gm, '<hr style="border:none; border-top:1px solid var(--border-subtle); margin:8px 0;">')
-          .replace(/^###\s+(.*)$/gm, '<div style="font-size:0.92rem; font-weight:700; color:#F8FAFC; margin:8px 0 3px 0;">$1</div>')
-          .replace(/^##\s+(.*)$/gm, '<div style="font-size:0.98rem; font-weight:700; color:#93C5FD; margin:10px 0 5px 0;">$1</div>')
-          .replace(/^\s*[\*\-]\s+(.*)$/gm, '<div style="padding-left:10px; margin:2px 0;">• $1</div>')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\[VIVO-(\d+)\]/g, `<button class="cite-chip" data-target="entry-VIVO-$1">📍 min</button>`)
-          .replace(/\[SLIDE-(\d+)\]/g, `<button class="cite-chip">📑 Lám. $1</button>`)
-          .replace(/\n\n+/g, '<br><br>').replace(/\n/g, '<br>');
+        let html = formatMarkdownSafe(data.answer || '')
+          .replace(/\[VIVO-(\d+)\]/g, (_, p1) => `<button type="button" class="cite-chip" data-vivo="entry-VIVO-${p1}">Min ${p1}</button>`)
+          .replace(/\[SLIDE-(\d+)\]/g, (_, p1) => `<button type="button" class="cite-chip" data-slide="${p1}">Lám. ${p1}</button>`)
+          .replace(/\[HIST-([A-Z0-9]+)\]/g, () => `<button type="button" class="cite-chip" data-capsule="1">Clase previa</button>`);
 
         const voiceHtml = data.voicePrompt
-          ? `<div class="voice-prompt-box"><div class="voice-prompt-label">🙋‍♂️ Para levantar la mano / Zoom:</div><div class="voice-prompt-text">"${data.voicePrompt}"</div></div>`
+          ? `<div class="voice-prompt-box"><div class="voice-prompt-label">${icon('mic', 12)} Para sala / Zoom</div><div class="voice-prompt-text">"${escapeHtml(data.voicePrompt)}"</div></div>`
           : '';
-        const cacheBadge = data.fromCache ? `<span style="font-size:0.65rem; background:rgba(56,189,248,0.14); color:#38BDF8; padding:1px 6px; border-radius:4px;">⚡ Instantáneo</span>` : '';
-        const altBtn = data.fromCache
-          ? `<button type="button" class="btn btn-outline btn-xs sim-alt-btn" style="margin-top:6px; color:#38BDF8;">🔄 Explicar desde otro ángulo</button>`
-          : '';
+        const cacheBadge = data.fromCache ? `<span style="font-size:11px; color:var(--cite-color);">· Caché</span>` : '';
 
         row.innerHTML = `
           <div class="msg-meta"><span><strong>${data.chatMode === 'full_ia' ? 'TUTOR FULL IA' : 'CO-PILOTO'}</strong> ${cacheBadge}</span></div>
-          <div style="font-size:0.84rem;">${html}</div>
+          <div style="font-size:13px;">${html}</div>
           ${voiceHtml}
-          ${altBtn}
+          <div class="msg-actions-bar">
+            <button type="button" class="btn btn-ghost btn-xs sim-quote-btn">${icon('quote', 12)} <span>Citar</span></button>
+            ${data.fromCache ? `<button type="button" class="btn btn-ghost btn-xs sim-alt-btn" style="color:var(--cite-color);">${icon('refresh', 12)} <span>Otro ángulo</span></button>` : ''}
+          </div>
         `;
-        const b = row.querySelector('.sim-alt-btn');
-        if (b) b.addEventListener('click', () => handleSimChat(null, q, true));
+
+        row.querySelectorAll('[data-vivo]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const target = document.getElementById(btn.getAttribute('data-vivo'));
+            if (target) {
+              target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              target.classList.add('highlight-flash');
+              setTimeout(() => target.classList.remove('highlight-flash'), 1800);
+            }
+          });
+        });
+        row.querySelectorAll('[data-slide], [data-capsule]').forEach(btn => {
+          btn.addEventListener('click', openSimCapsule);
+        });
+        row.querySelector('.sim-quote-btn')?.addEventListener('click', () => {
+          setSimQuote({ type: 'assistant', refId: data.questionId, label: 'Respuesta anterior', text: data.answer || '' });
+        });
+        row.querySelector('.sim-alt-btn')?.addEventListener('click', () => handleSimChat(null, q, true));
 
         simChatMessages.appendChild(row);
         simChatMessages.scrollTop = simChatMessages.scrollHeight;
@@ -437,7 +544,8 @@
             delimiters: [
               { left: '$$', right: '$$', display: true },
               { left: '$', right: '$', display: false }
-            ]
+            ],
+            throwOnError: false
           });
         }
         syncState();
@@ -452,14 +560,14 @@
       if (!c) return;
       let html = '';
       if (c.teacherEmphasis?.length) {
-        html += `<div style="background:rgba(245,158,11,0.1); padding:8px 10px; border-radius:6px;"><strong style="color:#FCD34D;">📌 Avisos Control:</strong><ul style="margin:4px 0 0 18px;">${c.teacherEmphasis.map(e => `<li>[${e.timestamp}] ${e.text}</li>`).join('')}</ul></div>`;
+        html += `<div style="background:rgba(245,158,11,0.1); padding:8px 10px; border-radius:6px;"><strong style="color:#FCD34D;">Avisos Control:</strong><ul style="margin:4px 0 0 18px;">${c.teacherEmphasis.map(e => `<li>[${escapeHtml(e.timestamp)}] ${escapeHtml(e.text)}</li>`).join('')}</ul></div>`;
       }
       (c.slideBlocks || []).forEach(sb => {
         if (!sb.spokenEntries.length && c.totalEntries > 0) return;
-        html += `<div style="background:var(--surface-2); padding:8px 10px; border-radius:6px;"><strong>📑 Lám. ${sb.slideNumber}: ${sb.title}</strong><ul style="margin:4px 0 0 18px;">${sb.spokenEntries.map(se => `<li>[${se.timestamp}] ${se.text}</li>`).join('')}</ul></div>`;
+        html += `<div style="background:var(--surface-2); padding:8px 10px; border-radius:6px;"><strong>Lámina ${sb.slideNumber}: ${escapeHtml(sb.title)}</strong><ul style="margin:4px 0 0 18px;">${sb.spokenEntries.map(se => `<li>[${escapeHtml(se.timestamp)}] ${escapeHtml(se.text)}</li>`).join('')}</ul></div>`;
       });
       if (c.taFocusPoints?.length) {
-        html += `<div style="background:rgba(139,92,246,0.12); padding:8px 10px; border-radius:6px;"><strong style="color:#DDD6FE;">📋 Pauta Auxiliar:</strong><ul style="margin:4px 0 0 18px;">${c.taFocusPoints.map(tp => `<li><strong>${tp.topic}</strong> (${tp.totalSignals} señales) — ${tp.status}</li>`).join('')}</ul></div>`;
+        html += `<div style="background:rgba(139,92,246,0.12); padding:8px 10px; border-radius:6px;"><strong style="color:#DDD6FE;">Pauta Auxiliar:</strong><ul style="margin:4px 0 0 18px;">${c.taFocusPoints.map(tp => `<li><strong>${escapeHtml(tp.topic)}</strong> (${tp.totalSignals} señales) — ${escapeHtml(tp.status)}</li>`).join('')}</ul></div>`;
       }
       document.getElementById('simCapsuleBody').innerHTML = html || 'Sin datos aún.';
       document.getElementById('simCapsuleModal').classList.add('active');

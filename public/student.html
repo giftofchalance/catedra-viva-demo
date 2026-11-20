@@ -3,235 +3,212 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Cátedra Viva — Estudiante en el Aula</title>
-  <link rel="stylesheet" href="/css/app.css?v=6">
+  <title>Cátedra Viva V4 — Estudiante</title>
+  <link rel="stylesheet" href="/css/app.css?v=10">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
-  <style>
-    .mobile-tab-bar {
-      display: none;
-      position: sticky;
-      top: 0;
-      z-index: 45;
-      border-bottom: 1px solid var(--surface-border);
-      background: var(--surface);
-    }
-    @media (max-width: 900px) {
-      .mobile-tab-bar { display: flex; }
-      .col-panel.is-hidden-mobile { display: none !important; }
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 10px 8px;
-      border: none;
-      background: none;
-      color: var(--text-muted);
-      font-weight: 700;
-      font-size: 0.84rem;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-    }
-    .tab-btn.active {
-      color: var(--text);
-      border-bottom-color: var(--primary);
-      background: rgba(59, 130, 246, 0.06);
-    }
-    .lost-bar-wrap {
-      padding-top: 8px;
-      border-top: 1px solid var(--border-subtle);
-      display: flex;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-  </style>
 </head>
 <body class="app-viewport-locked">
 
-  <!-- Topbar -->
+  <!-- Topbar 1 sola fila (48px móvil / 52px desktop) -->
   <header class="topbar">
-    <div class="brand-wrap">
-      <a href="/" class="brand-icon" title="Volver al inicio" style="text-decoration:none; color:inherit;">🎓</a>
-      <div>
-        <div class="brand-title" id="studentCourseTitle">Cargando aula...</div>
-        <div class="brand-subtitle" id="studentCourseCode">Aula Aumentada en Vivo</div>
+    <a href="/" class="brand-wrap" title="Volver a portada">
+      <span class="brand-icon" data-icon="graduation" data-size="16"></span>
+      <div class="brand-meta">
+        <span class="brand-title" id="studentCourseTitle">Cargando curso...</span>
+        <span class="brand-subtitle desktop-only-label" id="studentCourseCode">Aula en Vivo</span>
       </div>
-    </div>
+    </a>
+
     <div class="topbar-actions">
-      <button id="btnStudentPrivacy" class="privacy-pill" title="Privacidad garantizada">
-        <span>🛡️</span>
-        <span>100% Anónimo</span>
-      </button>
-      <button id="btnStudentCapsule" class="btn btn-outline btn-xs">
-        📘 Apunte Vivo
-      </button>
       <div class="conn-pill waiting" id="liveConnBadge">
         <span class="dot-pulse"></span>
-        <span id="liveConnText">En espera del profesor</span>
+        <span id="liveConnText">En espera</span>
       </div>
-      <div style="display: flex; gap: 4px;">
-        <button id="btnFontDown" class="btn-font-control" title="Achicar texto">A−</button>
-        <button id="btnFontUp" class="btn-font-control" title="Agrandar texto">A+</button>
-      </div>
+      <button id="btnStudentCapsule" class="btn btn-outline btn-sm" title="Abrir Apunte Vivo Fusionado">
+        <span class="icon-slot" data-icon="book" data-size="14"></span>
+        <span>Apunte</span>
+      </button>
+      <button id="btnStudentPrivacy" class="btn btn-outline btn-icon" title="Privacidad y anonimato garantizado" aria-label="Privacidad">
+        <span class="icon-slot" data-icon="shield" data-size="15"></span>
+      </button>
     </div>
   </header>
 
-  <!-- Pestañas para Pantallas Móviles o Split Estrecho -->
-  <div class="mobile-tab-bar">
-    <button id="tabBtnTranscript" class="tab-btn active">📝 Lo que dice el Profe</button>
-    <button id="tabBtnChat" class="tab-btn">💬 Tutor de Aula</button>
-  </div>
-
   <main class="classroom-grid">
 
-    <!-- COLUMNA 1: TRANSCRIPCIÓN EN VIVO CON LÁMINAS + CITAS + BOTÓN "ME PERDÍ" -->
-    <section id="panelTranscript" class="card col-panel">
-      
-      <!-- Puente: La Clase Anterior -->
+    <!-- COLUMNA 1: TRANSCRIPCIÓN EN VIVO + PULSOS ANÓNIMOS -->
+    <section id="panelTranscript" class="card col-panel is-hidden-mobile">
       <details id="bridgeDetails" class="bridge-box">
-        <summary id="bridgeSummaryText">📚 Puente: Resumen de la Clase Anterior</summary>
-        <div id="bridgeBody" style="margin-top: 8px; font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;"></div>
+        <summary id="bridgeSummaryText">Puente: Clase Anterior</summary>
+        <div id="bridgeBody" style="margin-top: 8px; font-size: 13px; color: var(--text-muted); line-height: 1.5;"></div>
       </details>
 
       <div class="card-header" style="flex-wrap:wrap;">
-        <div>
-          <span class="card-title">📝 Lo que va diciendo el profesor</span>
-          <span id="ucursosStatusTag" style="font-size: 0.7rem; color: #DDD6FE;">U-Cursos Sync</span>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="card-title">
+            <span class="icon-slot" data-icon="fileText" data-size="15"></span>
+            <span>Lo que dice el profe</span>
+          </span>
+          <span id="ucursosStatusTag" style="font-size: 11px; color: #C4B5FD;"></span>
         </div>
-        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <div id="transcriptFilterControl" style="display:flex; gap:4px;">
-            <button type="button" class="btn btn-outline btn-xs active-filter" data-filter="all" style="border-color: var(--primary);">Todo</button>
-            <button type="button" class="btn btn-outline btn-xs" data-filter="importancia">📌 Ojo Control</button>
-            <button type="button" class="btn btn-outline btn-xs" data-filter="formula">🧮 Fórmulas</button>
-          </div>
-          <label style="font-size: 0.72rem; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 5px;">
-            <span>Sin digresiones</span>
-            <span class="toggle-switch" style="transform:scale(0.8);">
-              <input type="checkbox" id="checkFilterDigressions">
-              <span class="toggle-slider"></span>
-            </span>
-          </label>
+        <div id="transcriptFilterControl" style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-outline btn-xs active-filter" data-filter="all" style="border-color: var(--primary);">Todo</button>
+          <button type="button" class="btn btn-outline btn-xs" data-filter="importancia">Ojo Control</button>
+          <button type="button" class="btn btn-outline btn-xs" data-filter="formula">Fórmulas</button>
+          <button type="button" class="btn btn-outline btn-xs" data-filter="ejemplo">Ejemplos</button>
         </div>
       </div>
 
       <div id="studentFeed" class="feed-box">
         <div id="studentEmptyState" style="text-align: center; padding: 3rem 1rem; color: var(--text-muted);">
-          <div style="font-size: 2rem; margin-bottom: 6px;">🎙️</div>
-          <strong>Esperando al profesor</strong>
-          <p style="font-size: 0.82rem; margin-top: 4px;">
-            Las frases del profesor aparecerán aquí en tiempo real mapeadas a las láminas de la clase. Toca cualquier frase para preguntarle al tutor.
+          <div style="margin-bottom: 8px; color: var(--text-dim);" data-icon="mic" data-size="24"></div>
+          <div style="font-weight: 700; color: var(--text);">Esperando al profesor</div>
+          <p style="font-size: 13px; margin-top: 4px;">
+            Las frases de la clase aparecerán aquí en vivo. Toca cualquiera para citarla y preguntarle al tutor.
           </p>
         </div>
       </div>
 
-      <!-- Pulso Rápido Anónimo (Presencial y Clase Virtual Zoom/Meet) -->
-      <div class="lost-bar-wrap" style="display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap:6px; width:100%;">
-        <button id="btnLostSignal" class="btn btn-lost btn-xs" style="padding:8px 6px;">
-          ⚡ Me perdí
+      <!-- Barra inferior de pulsos en vivo -->
+      <div id="livePulseStrip" style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; gap:6px; padding-top:8px; border-top:1px solid var(--border-subtle); flex-shrink:0;">
+        <button id="btnLostSignal" class="btn btn-lost btn-sm">
+          <span class="icon-slot" data-icon="zap" data-size="14"></span>
+          <span>Me perdí</span>
         </button>
-        <button id="btnPulseFast" class="btn btn-outline btn-xs" style="padding:8px 6px; color:#93C5FD; border-color:rgba(59,130,246,0.35);">
-          🐢 Muy rápido
+        <button id="btnPulseFast" class="btn btn-outline btn-sm" style="color:#93C5FD;">
+          <span class="icon-slot" data-icon="clock" data-size="14"></span>
+          <span>Más lento</span>
         </button>
-        <button id="btnPulseExample" class="btn btn-outline btn-xs" style="padding:8px 6px; color:#DDD6FE; border-color:rgba(139,92,246,0.35);">
-          💡 Pedir ejemplo
+        <button id="btnPulseExample" class="btn btn-outline btn-sm" style="color:#DDD6FE;">
+          <span class="icon-slot" data-icon="lightbulb" data-size="14"></span>
+          <span>Ejemplo</span>
+        </button>
+      </div>
+
+      <!-- Reemplazo limpio tras cerrar la clase -->
+      <div id="postClassTranscriptBanner" style="display:none; justify-content:space-between; align-items:center; gap:8px; padding-top:8px; border-top:1px solid var(--border-subtle); flex-shrink:0;">
+        <span style="font-size:12px; color:#DDD6FE; font-weight:600;">Clase finalizada · Modo Estudio Activo</span>
+        <button id="btnOpenPostClassCapsule" type="button" class="btn btn-purple btn-sm">
+          <span class="icon-slot" data-icon="book" data-size="14"></span>
+          <span>Ver Apunte Vivo</span>
         </button>
       </div>
     </section>
 
-    <!-- COLUMNA 2: TUTOR DE AULA (3 MODOS CONTROLADOS POR EL PROFE + IMPULSO A PARTICIPAR) -->
-    <section id="panelChat" class="card col-panel is-hidden-mobile">
-      
+    <!-- COLUMNA 2: CO-PILOTO TUTOR (MEMORIA MULTI-TURNO + QUOTE REPLY) -->
+    <section id="panelChat" class="card col-panel">
       <div class="card-header">
-        <span class="card-title">💬 Co-Piloto de Aula</span>
-        <span id="studentModeBadge" class="conn-pill" style="padding: 3px 8px; font-size: 0.7rem;">
-          🟢 Modo Seguimiento (2–3 líneas + Voz Alta)
+        <span class="card-title">
+          <span class="icon-slot" data-icon="message" data-size="15"></span>
+          <span>Tutor de Aula</span>
         </span>
+        <span id="studentModeBadge" class="conn-pill">Seguimiento · Breve</span>
       </div>
 
-      <!-- Banner / Toast de Cambio de Modo (ej. Clase finalizada -> Full IA) -->
-      <div id="modeToastBanner" style="display:none; background:rgba(139,92,246,0.16); border:1px solid rgba(139,92,246,0.4); border-radius:var(--radius-sm); padding:8px 10px; font-size:0.78rem; color:#EDE9FE; margin-bottom:6px; flex-shrink:0;"></div>
+      <div id="modeToastBanner" style="display:none; background:rgba(139,92,246,0.14); border-left:3px solid var(--purple); border-radius:4px; padding:7px 10px; font-size:12px; color:#EDE9FE; margin-bottom:8px; flex-shrink:0;"></div>
 
-      <!-- Banner de Modo Pizarra -->
       <div id="whiteboardBanner" class="whiteboard-banner" style="display: none;">
-        <span style="font-size: 1.2rem;">👀</span>
-        <div>
-          <strong>Modo Pizarra Activo</strong>
-          <div style="font-size: 0.76rem;">El profesor pausó el chat para centrar la atención en la pizarra. Tus preguntas igual se registran en el Radar.</div>
-        </div>
+        <span class="icon-slot" data-icon="pause" data-size="15"></span>
+        <span><strong>Modo Pizarra:</strong> Chat en pausa para enfocarse en sala; tus dudas igual se registran en el Radar.</span>
       </div>
 
-      <!-- Preguntas de Prueba Rápida -->
-      <div style="margin-bottom: 6px; flex-shrink: 0;">
-        <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;">
-          Consultas rápidas del ramo:
-        </span>
-        <div id="quickPromptChips" class="chips-wrap"></div>
-      </div>
+      <div id="quickPromptChips" class="chips-wrap"></div>
 
-      <!-- Historial de Chat (scroll único interno oscuro) -->
       <div id="chatMessages" class="chat-messages">
-        <div class="msg-row msg-assistant">
+        <div class="msg-row msg-assistant" data-welcome="true">
           <div class="msg-meta">
             <span style="font-weight: 700; color: #6EE7B7;">CO-PILOTO DE AULA</span>
-            <span>• En línea</span>
+            <span>En línea</span>
           </div>
-          <div style="font-size: 0.86rem;">
-            Mientras la clase esté en vivo responderé en <strong>2–3 líneas</strong> para no distraerte del profesor, y te ayudaré a formular preguntas para levantar la mano. Cuando el profesor abra el <strong>Modo Full IA</strong> o cierre la clase, podrás estudiar a fondo.
+          <div style="font-size: 14px; line-height: 1.55;">
+            Durante la clase te ayudo a reengancharte en <strong>2–3 líneas</strong> con citas directas a lo dicho por el profesor y una frase lista para preguntar. También puedes pulsar <strong>Citar</strong> en cualquier respuesta o frase para seguir profundizando.
           </div>
         </div>
       </div>
 
-      <!-- Formulario de Preguntas siempre anclado abajo -->
+      <!-- Barra removible de Cita Activa (Quote-Reply) -->
+      <div id="quoteComposerBar" class="quote-composer-bar">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+          <span class="icon-slot" data-icon="quote" data-size="13" style="color:var(--cite-color);"></span>
+          <span id="quoteComposerText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></span>
+        </div>
+        <button id="btnClearQuote" type="button" class="btn btn-ghost btn-xs" aria-label="Quitar cita">
+          <span class="icon-slot" data-icon="close" data-size="13"></span>
+        </button>
+      </div>
+
       <form id="studentChatForm" class="chat-form">
-        <input 
-          id="studentChatInput" 
-          type="text" 
-          class="chat-input" 
-          placeholder="Escribe tu duda rápida sobre la clase..."
+        <input
+          id="studentChatInput"
+          type="text"
+          class="chat-input"
+          placeholder="Pregunta sobre la clase o cualquier duda del ramo..."
           autocomplete="off">
-        <button id="btnSendChat" type="submit" class="btn btn-primary">
-          Preguntar ➔
+        <button id="btnSendChat" type="submit" class="btn btn-primary" aria-label="Enviar pregunta">
+          <span class="icon-slot" data-icon="send" data-size="14"></span>
+          <span>Preguntar</span>
         </button>
       </form>
     </section>
 
   </main>
 
-  <!-- MODAL APUNTE VIVO FUSIONADO (ESTUDIANTE) -->
+  <!-- Navegación Inferior Móvil (1 Pulgar) -->
+  <nav class="mobile-bottom-nav" aria-label="Navegación aula móvil">
+    <button id="mobNavTranscript" type="button" class="mobile-nav-btn">
+      <span class="icon-slot" data-icon="fileText" data-size="15"></span>
+      <span>En Vivo</span>
+    </button>
+    <button id="mobNavChat" type="button" class="mobile-nav-btn active">
+      <span class="icon-slot" data-icon="message" data-size="15"></span>
+      <span>Tutor</span>
+    </button>
+    <button id="mobNavLost" type="button" class="mobile-nav-btn pulse-cta">
+      <span class="icon-slot" data-icon="zap" data-size="15"></span>
+      <span>Me perdí</span>
+    </button>
+  </nav>
+
+  <!-- MODAL APUNTE VIVO FUSIONADO -->
   <div id="studentCapsuleModal" class="modal-overlay">
     <div class="modal-card">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
         <div>
-          <h3 style="font-size: 1.02rem;">📘 Apunte Vivo Fusionado (Láminas + Voz del Profe)</h3>
-          <div style="font-size: 0.74rem; color: var(--text-muted);">Combina las diapositivas de U-Cursos con lo que el profesor explicó verbalmente y avisó para el control.</div>
+          <h3 style="font-size: 16px;">Apunte Vivo Fusionado</h3>
+          <div style="font-size: 12px; color: var(--text-muted);">Láminas, explicación oral en sala y avisos clave</div>
         </div>
         <div style="display:flex; gap:6px;">
-          <button id="btnStudentDownloadCapsule" class="btn btn-primary btn-xs">📥 Descargar (.md)</button>
-          <button id="btnStudentCloseCapsule" class="btn btn-outline btn-xs">Cerrar</button>
+          <button id="btnStudentDownloadCapsule" class="btn btn-primary btn-sm">
+            <span class="icon-slot" data-icon="download" data-size="14"></span>
+            <span>Descargar (.md)</span>
+          </button>
+          <button id="btnStudentCloseCapsule" class="btn btn-outline btn-sm">Cerrar</button>
         </div>
       </div>
-      <div id="studentCapsuleBody" style="display:flex; flex-direction:column; gap:10px; font-size:0.84rem;"></div>
+      <div id="studentCapsuleBody" style="display:flex; flex-direction:column; gap:10px; font-size:13px;"></div>
     </div>
   </div>
 
   <!-- MODAL PRIVACIDAD ESTUDIANTE -->
   <div id="studentPrivacyModal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 480px;">
+    <div class="modal-card" style="max-width: 460px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
-        <h3 style="font-size: 0.96rem;">🛡️ Garantía de Privacidad y Anonimato</h3>
+        <h3 style="font-size: 16px;">Privacidad y Anonimato</h3>
         <button id="btnStudentClosePrivacy" class="btn btn-outline btn-xs">Cerrar</button>
       </div>
-      <p style="font-size:0.82rem; color:var(--text-muted); line-height:1.5;">
-        • <strong>Cero identificación personal:</strong> No existen cuentas, correos ni historial por alumno.<br>
-        • <strong>Preguntas anónimas (Capa 2):</strong> El profesor y el auxiliar solo ven temas agrupados (ej. "4 dudas sobre VAN vs TIR"), jamás quién preguntó.<br>
-        • <strong>Audio efímero:</strong> La voz de la sala se transcribe y se destruye en menos de 1 segundo.
-      </p>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--text-muted); line-height:1.5;">
+        <p><strong style="color:var(--text);">Cero cuentas personales:</strong> No hay login, correo ni historial asociado a tu identidad.</p>
+        <p><strong style="color:var(--text);">Privacidad en 2 Capas:</strong> El profesor y el auxiliar solo ven tópicos agrupados anónimos, nunca quién preguntó.</p>
+        <p><strong style="color:var(--text);">Audio efímero:</strong> Cada fragmento se transcribe y se destruye del servidor en menos de 1 segundo.</p>
+      </div>
     </div>
   </div>
 
-  <script type="module" src="/js/student.js?v=8"></script>
+  <script type="module" src="/js/student.js?v=10"></script>
 </body>
 </html>
