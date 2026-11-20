@@ -1,162 +1,136 @@
-# Cátedra Viva V3.1 — Guía Completa para la Presentación del Martes
+# Cátedra Viva V4 (Clean-Core) — Guía Completa para la Presentación del Martes
 
-Documento de referencia con todas las funcionalidades implementadas en V3 / V3.1, decisiones de diseño (*trade-offs*), valor estratégico de la data, arquitectura de privacidad/tokenomics, resultados reales de las pruebas de estrés de 5 minutos + 6 casos límite y guión de demo en vivo.
+Documento de referencia con la arquitectura final **V4 Clean-Core**, funcionalidades vigentes, evolución del enfoque frente al discurso docente (*Cero Exclusión*), valor estratégico opcional de la data, privacidad/tokenomics, resultados verificados tanto en simulación larga (5m) como en **audio real de clase presencial en pizarra (3m)** y guión de demo en vivo.
 
 ---
 
 ## 1. Propuesta de Valor Central: "¿Por qué Cátedra Viva y no ChatGPT?"
 
 1. **No mata la oportunidad de levantar la mano — la fomenta:**
-   - Un LLM genérico responde 5 párrafos largos mientras el profesor sigue hablando: el estudiante deja de escuchar y nunca pregunta en sala.
-   - En Cátedra Viva (`🟢 Modo Seguimiento`), el co-piloto responde en **2–3 líneas de reenganche rápido**, cita exactamente `[VIVO-X]` o `[SLIDE-X]`, y genera automáticamente una caja verde con **la pregunta redactada en primera persona lista para levantar la mano o pegar en el chat de Zoom/Meet** (`📋 Copiar para Zoom`).
-2. **Anclaje vivo en tiempo real (Voz + PPT + Memoria):**
-   - Sabe qué dijo el profesor hace 20 segundos (`[VIVO-X]`), en qué lámina está (`[SLIDE-X]` vía *U-Cursos Auto-Sync*), qué avisó que entra en el control (`📌 Ojo Control`) y qué se vio la clase pasada (`[HIST-X]`).
+   - Un LLM genérico responde párrafos extensos mientras el profesor sigue hablando: el estudiante desconecta de la sala y no pregunta.
+   - En Cátedra Viva (`Modo Seguimiento`), el co-piloto entrega una guía breve de reenganche anclada a lo recién explicado y prepara la pregunta en primera persona para levantar la mano o pegar en Zoom.
+2. **Anclaje vivo al contexto real del aula (Voz + Material + Seguimiento Conversacional):**
+   - Captura el habla del docente en tiempo real (`1.0s` de solapamiento acústico deduplicado con `mergeOverlappingTranscript`), la vincula al material cargado (`[MAT-X]`, `[HIST-X]`) y permite hacer preguntas de seguimiento citando cualquier fragmento o respuesta previa mediante **Quote-Reply**.
 3. **Principio "Prender y Olvidarse" (Cero trabajo extra):**
-   - El profesor no modera un chat, no marca "duda resuelta" manualmente (el sistema auto-resuelve clusters por voz cuando retoma el tema) y termina la clase con 1 clic (`🏁 Terminar Clase`), liberando el **Apunte Vivo Fusionado**, la **Pauta del Auxiliar** y el **Modo Full IA**.
+   - Pensado para tres perfiles docentes sin carga operativa: quien solo presiona **Iniciar Clase** y se olvida, quien restringe la clase a `Seguimiento` / `Pizarra`, y quien abre `Full IA` en vivo o usa el Radar para ajustar el ritmo.
+   - El sistema auto-resuelve clusters cuando el profesor retoma verbalmente el tópico (`autoResolveClustersFromVoice`) y cierra la clase en 1 clic con **Terminar Clase** (`classClosed = true`).
 
 ---
 
-## 2. Catálogo Completo de Funcionalidades (V3 / V3.1)
+## 2. Arquitectura y Funcionalidades Clave (V4 Clean-Core)
 
-### A. Control Maestro Docente en 3 Modos
-- **`🟡 Modo Pizarra`:** Pausa las respuestas automáticas del chatbot cuando el profesor quiere atención 100% en la pizarra presencial. Las dudas que escriben los alumnos no se pierden: quedan registradas anónimamente en el Radar Profe/Auxiliar.
-- **`🟢 Modo Seguimiento` *(default en vivo)*:** Respuestas de 2–3 líneas + citas exactas + sugerencia en primera persona para preguntar en voz alta / Zoom. **No existe botón de bypass en la vista estudiante** para saltar a respuestas largas durante la clase.
-- **`🟣 Modo Full IA` (En Vivo o Post-Clase):**
-  - **Confirmado: sigue 100% habilitable durante la clase en vivo** si el profesor decide desbloquearlo manualmente desde el control maestro (`#chatModeControl`) — por ejemplo, en talleres o bloques de resolución de ejercicios.
-  - Además, al pulsar **`🏁 Terminar Clase`** (o `✨ Cerrar & Full IA`), la sala cambia **automáticamente en 1 clic** a `🟣 Full IA` para que los alumnos estudien post-clase paso a paso con derivaciones en LaTeX y preguntas de chequeo conceptual.
+### A. Estados y Modos Pedagógicos Reales
+- **Modo Pizarra:** Detiene las respuestas automáticas del chat cuando el profesor pide atención plena en pizarra, manteniendo activo el registro anónimo de dudas en el Radar.
+- **Modo Seguimiento *(predeterminado en vivo)*:** Respuestas acotadas orientadas a reenganchar con la clase e incentivar la pregunta presencial o en videollamada.
+- **Modo `Full IA` en Vivo (`classClosed === false`):** Habilitable por el profesor *durante* la clase sin cerrarla ni apagar el Radar de Dudas, desbloqueando explicaciones completas para bloques de ejercicios o talleres.
+- **Post-Clase · `Full IA` (`classClosed === true`):** Al presionar **Terminar Clase**, la sesión cambia a fase post-clase para estudio autónomo y separa las métricas de preguntas en vivo vs. estudio posterior (`inClass` vs. `postClass`).
 
-### B. Adaptación Modular Automática (Sin Encasillar Asignaturas)
-- Sin configuraciones manuales por ramo: el motor detecta automáticamente si la duda es **formal/matemática** (derivación paso a paso en LaTeX), **conceptual/causal** (intuición y contraste) o **híbrida** (ej. Electromagnetismo, Finanzas, Macroeconomía: intuición física/económica + ecuación).
+### B. Quote-Reply y Memoria Acotada (Foco Estudiante)
+- El estudiante puede presionar **Citar** tanto en líneas de la transcripción como en respuestas anteriores del tutor (`quotedContext`).
+- Incluye ventana acotada de los últimos 2 turnos (`chatHistory` ubicado **después** del prefijo estático de clase para no invalidar Prefix KV-Caching) y persistencia local de conversación en `sessionStorage`.
+- Navegación móvil de un pulgar (`48px` de altura en `.topbar` de `/estudiante`, barra inferior `En Vivo | Tutor | Me perdí`), actualización incremental del DOM y citas `[HIST-X]` / `[MAT-X]` clicables.
 
-### C. Radar de Comprensión + Auto-Resolución Hands-Free
-- Agrupa dudas repetidas y pulsos anónimos (`⚡ Me perdí`, `🐢 Muy rápido`, `💡 Pedir ejemplo`) en **clusters por tópico** visibles en tiempo real para profesor y auxiliar (con banner superior legible a 3 metros desde la pizarra cuando hay cuellos de botella).
-- **Hands-Free Voice Auto-Resolution:** Si el profesor retoma verbalmente un tópico abierto en el Radar durante el siguiente segmento de voz, `autoResolveClustersFromVoice()` lo marca automáticamente como resuelto (`✓ Retomado oralmente [MM:SS]`) sin exigir interacción física del docente.
+### C. Agnosticismo Curricular y Escalabilidad sin Configuración Rígida
+- Se eliminó la dependencia exclusiva de reglas hardcoded de los ramos demo: `detectTopicCluster()`, `matchSlideForSegment()` y `maybeUpdateSmartChapters()` (histéresis `>= 50s` y `>= 8` palabras) operan sobre tokens reales del curso activo.
+- Creación dinámica de ramos desde la consola (`+ Nueva clase` vía `POST /api/courses/custom`) y carga en línea de láminas (`+ Agregar material`), validado en vivo con `FI2002 — Electromagnetismo` haciendo match automático con `Lámina 2: Ley de Lenz`.
+- Adaptación automática al tipo de duda (matemática, conceptual o híbrida) y **soft-landing** de alcance académico (`isLikelyAcademicQuestion()`), respondiendo prerequisitos matemáticos sin romper el foco ni requerir botones de bypass.
 
-### D. U-Cursos Auto-Sync & Apunte Vivo Fusionado (Con Degradación Limpia)
-- Mapea automáticamente lo hablado en sala contra las láminas escuetas cargadas del ramo (`SLIDE-1`..`SLIDE-4`, clicables con vista previa de bullets).
-- Si el profesor habla sin diapositivas, usa pizarra libre o una PPT minimalista de 5 láminas escuetas, los segmentos que no calzan con un slide degradan limpiamente a **Pizarra Libre** (`unmappedEntries`) sin romperse ni inventar asociaciones.
-- Genera la **Cápsula Post-Clase** descargable en Markdown (`.md`) con 3 pestañas:
-  1. `📘 Apunte Vivo (Slides + Voz + Avisos Ojo Control)`
-  2. `📋 Pauta Automática Auxiliar` (qué costó más, dudas anónimas reales y estado de resolución)
-  3. `📈 Data & Insights (Opcional)`
-
-### E. Soporte Nativo para Clases Virtuales (Zoom / Meet / Teams)
-- Selector de fuente `💻 Virtual (Zoom/Meet)` que captura audio limpio directo de la pestaña/ventana (`getDisplayMedia` con audio sin video, evitando eco de parlantes o ruido ambiente).
-- Acceso estudiantil sin fricción mediante enlace directo o QR SVG generado localmente (`/api/qr`) sin crear cuentas.
-- **Barra de Pulsos Anónimos** en `/estudiante`: `⚡ Me perdí`, `🐢 Muy rápido`, `💡 Pedir ejemplo` + botón **`📋 Copiar para Zoom`** en la pregunta sugerida para pegarla directo al chat de la videollamada.
-
-### F. Experiencia de Aula & Laboratorio Tri-Rol (UI Obsidian Graphite)
-- Vistas independientes (`/profesor`, `/estudiante`, `/`) + **Laboratorio Tri-Rol (`/simulador`)** con las 3 columnas en 1 pantalla (Profe • Radar Auxiliar • Estudiante) y audios reales de los 3 ramos (`Macroeconomía IS-LM`, `Probabilidades/Cálculo`, `Finanzas CAPM/WACC/VAN`).
-- Filtros 1-clic en transcripción (`Todo | 📌 Ojo Control | 🧮 Fórmulas | Sin digresiones`), métricas Read.ai en vivo (`Velocidad PPM`, `Palabras`, `"Me perdí"`) y capítulos inteligentes automáticos.
+### D. Consola Docente Simplificada + Soporte Virtual (Zoom / Meet)
+- `/profesor` simplificada en 2 zonas con **3 tarjetas principales**, sin emojis en controles de sistema (iconos SVG estilo Lucide uniformes en `public/js/icons.js`), flujo único de inicio/pausa/cierre y telemetría de costos trasladada al modal de Privacidad & GPU para despejar la vista en sala.
+- Sincronización en tiempo real mediante **SSE** (`/api/live/stream` con `stateVersion`).
+- Captura nativa para clases virtuales (audio de pestaña/ventana) + acceso estudiantil sin cuentas vía enlace o QR local.
 
 ---
 
-## 3. Trade-Off Crítico del Micro-Labeler (`digresión` vs. Analogías)
+## 3. Decisión Crítica del Micro-Labeler: De *Soft-Tagging* a Cero Exclusión
 
-> *Inquietud válida de Bruno para defender el martes ante críticas técnicas o pedagógicas.*
+> *Punto clave para responder con solidez si preguntan cómo evitamos filtrar contenido valioso cuando el profesor se sale del guión.*
 
-### ¿Cuál es el riesgo real?
-Un clasificador en tiempo real podría etiquetar equivocadamente como `digresion` una **analogía cotidiana usada para explicar materia** (ej. *"armar un portafolio diversificado es como armar una selección de fútbol o no poner todos los huevos en la misma canasta"*), o un comentario breve de transición que el alumno sí necesita entender.
+### ¿Qué demostró el audio real de clase presencial?
+Al evaluar una clase real grabada frente a pizarra (Prof. María Inés Baragatti), fragmentos que un filtro ingenuo consideraría "charla personal" o geografía (*"todos los de La Plata están cerca porque vivo en Bernal... él vive a 10 cuadras"*) eran en realidad **la intuición pedagógica directa del concepto de cercanía ($\epsilon$-entorno)**.
 
-### Cómo lo resolvimos (Enfoque: *Soft-Tagging No-Destructivo*)
-1. **Nunca borra información (`Zero Data Loss`):**
-   - A diferencia de un *Hard-Filter* que elimina chunks antes de guardarlos, Cátedra Viva aplica **Soft-Tagging**: todas las frases ingresan íntegras al transcript, al contexto RAG del chatbot y al Apunte Vivo Fusionado.
-   - El switch `Ocultar Digresiones` está **desactivado (`false`) por defecto** tanto en `/profesor` como en `/estudiante`, y solo oculta visualmente la tarjeta si el usuario lo pide.
-2. **Doble Barrera Anti-Falso-Positivo:**
-   - **En el LLM (`openai/gpt-oss-20b`):** Regla explícita de que cualquier metáfora cotidiana usada *para explicar un concepto* (fútbol, huevos, casino, cocina) es SIEMPRE `concepto_clave`, reservando `digresion` solo para logística desconectada (paraguas perdido, horario de pasillo).
-   - **En el Fallback Heurístico (`detectHeuristicCategory`):** Bloqueo determinista de términos académicos (`diversificación`, `riesgo`, `varianza`, `IS-LM`, `CAPM`, `Bayes`, etc.): si hay un término académico presente, **jamás** clasifica como `digresion`, aun cuando la API gratuita alcance su límite de RPM (`429`).
-
-**Cómo explicarlo en 20 segundos el martes:**
-*"Elegimos un trade-off explícito a favor del recall pedagógico: hacemos Soft-Tagging no destructivo en vez de Hard-Filtering. Si el profesor cuenta una analogía o broma relacionada con el ramo, nunca se borra del contexto de la IA ni del apunte; simplemente queda etiquetada para quien quiera filtrar logística de sala."*
+### Solución definitiva en V4: Cero `digresion`
+- En V3 mitigamos esto con *Soft-Tagging* no destructivo; en **V4 eliminamos por completo la categoría `digresion`**.
+- `services/labeler.js` (`openai/gpt-oss-20b` + heurística) clasifica estrictamente en **4 categorías positivas**: `concepto_clave`, `formula`, `importancia` y `ejemplo`.
+- **Beneficio defendible el martes:** Ninguna historia personal, broma conceptual ni analogía cotidiana del profesor queda excluida, oculta o marcada como relleno.
 
 ---
 
-## 4. Valor Estratégico de la Data Recopilada (*Posibilidad Opcional, Cero Obligación*)
+## 4. Valor Estratégico de la Data (*Posibilidad Opcional, Cero Obligación*)
 
-Toda interacción válida en la sala queda registrada anónimamente con trazabilidad temática y fase temporal (`phase: 'in_class'` vs `phase: 'post_class'`), sin identidad de estudiante:
+Toda consulta académica válida y pulso anónimo queda trazada por fase (`phase: inClass` vs. `postClass`), sin identidad del estudiante:
 
-- **Qué queda guardado hoy en `qaLog` (`generateFusedPostClassCapsule`):**
-  1. Consultas realizadas **durante la clase** (distinguiendo `🟢 Seguimiento` vs `🟣 En Vivo Full IA`), su tópico (`TOPIC_RULES` / slide), timestamp, respuesta entregada y si fue servida desde caché seguro.
-  2. Consultas profundas realizadas **post-clase (`🟣 Post-Clase Full IA`)** tras el cierre de la sesión, que revelan dónde se traba el alumno cuando estudia solo fuera del aula.
-  3. Señales de pulso (`Me perdí`, `Muy rápido`, `Pedir ejemplo`) y énfasis del docente (`📌 Ojo Control`).
-
-- **Posibilidades de uso de alto valor (siempre optativas para el docente):**
-  1. **Comparativa Longitudinal Inter-Semestral (Tab `📈 Data & Insights (Opcional)`):**
-     - Permite a un profesor —**solo si él quiere, jamás como obligación ni mecanismo de evaluación/vigilancia**— comparar qué temas concentraron más dudas en vivo vs. post-clase en semestres anteriores (ej. *Otoño 2025 vs. Primavera 2025*) y validar con evidencia si probar una nueva forma de explicar (ej. un contraejemplo numérico antes de la fórmula o el canal causal del *crowding out* antes del gráfico) redujo las dudas en las cohortes siguientes.
-  2. **Pauta Viva de Ayudantía (Cero coordinación manual):**
-     - El auxiliar recibe automáticamente los tópicos con mayor fricción real de esa semana y ejemplos anónimos de cómo preguntan los alumnos.
-  3. **Evolución Basada en Evidencia de Guías y PPTs:**
-     - Detectar diapositivas escuetas donde sistemáticamente se acumulan pulsos `"💡 Pedir ejemplo"` o `"🐢 Muy rápido"` para reforzarlas el próximo semestre.
+- **Evidencia registrada en sesión:**
+  1. Dudas en tiempo real durante la clase (distinguiendo `Seguimiento` vs. `Full IA`) y tópicos del Radar.
+  2. Dudas **post-clase (`Post-Clase · Full IA`)**, que muestran qué conceptos siguen generando trabas cuando el estudiante estudia por su cuenta.
+  3. Pulsos anónimos (`Me perdí`, etc.) y avisos marcados por el docente.
+- **Usos posibles (siempre voluntarios para el profesor, nunca imposición ni evaluación docente):**
+  1. Comparar entre semestres en qué tópico se concentraron más preguntas antes y después de cambiar una estrategia de enseñanza o el orden de un ejemplo.
+  2. Entregar al auxiliar una pauta real de ayudantía basada en las fricciones observadas en sala sin trabajo de coordinación manual.
+  3. Detectar qué láminas minimalistas requieren un ejemplo adicional el semestre siguiente.
 
 ---
 
-## 5. Privacidad, Ética y Tokenomics + GPUs Dedicadas de Facultad
+## 5. Privacidad, Ética y Tokenomics + GPUs de Facultad
 
-### A. Privacidad por Diseño (EU AI Act & Ley 21.719 Chile)
-- **Audio Efímero 0s (Cero Biometría Vocal):** Cada chunk se normaliza vía `ffmpeg-static`, se transcribe y se elimina en `<1s` del servidor (`unlinkSync`, contador auditado en vivo `ephemeralChunksDeleted`). No se almacenan grabaciones ni voiceprints.
-- **Privacidad en 2 Capas (Anonimato Real):** No existen cuentas de usuario, RUT, correos ni IDs de alumno en Capa 1. Profesor y auxiliar únicamente observan clusters agregados en Capa 2 (ej. `"Curva IS: 4 señales"`), eliminando la inhibición social.
+### A. Privacidad por Diseño (Zero Biometría + Anonimato Real)
+- **Audio efímero sin almacenamiento:** Los fragmentos de audio se transcriben y eliminan tras procesarse; no se guardan grabaciones ni huellas vocales.
+- **Anonimato en 2 capas:** No existen cuentas ni identidades de estudiantes en las métricas compartidas; profesor y auxiliar solo observan clusters agregados de comprensión.
 
-### B. Tokenomics sin Sesgo Epistémico
-Un caché semántico ingenuo responde con respuestas antiguas que contradicen la explicación nueva o confunden preguntas con negaciones (*Negation Blindness* & *Temporal Drift*). Cátedra Viva implementa **4 guardias verificables**:
-1. **Guardia de Negación y Operadores (`extractLogicalSignature`):** Preguntar *"¿Por qué la curva IS **NO** tiene pendiente positiva?"* o cambiar signos/números invalida el match de caché respecto a *"¿Qué representa la curva IS?"*.
-2. **Invalidador Temporal (`transcriptCount`):** Si el profesor dijo un bloque nuevo desde la última respuesta cacheada, el contexto cambió y se exige recalcular.
-3. **`Single-Flight Coalescing` (`IN_FLIGHT_QUERIES`):** Si 30 alumnos en la sala preguntan casi lo mismo al mismo segundo tras un gráfico complejo, solo **1 llamada LLM** sale hacia la API/GPU y las demás comparten esa misma respuesta.
-4. **Control Manual (`🔄 Explicar desde otro ángulo`):** Fuerza `bypassCache: true` y sube diversidad para entregar otra analogía o derivación.
+### B. Caché Semántica Sin Sesgo Epistémico (`services/semanticCache.js`)
+Un caché naive repite respuestas viejas que ya no aplican o ignora negaciones (*Negation Blindness* & *Temporal Drift*). Cátedra Viva V4 aplica guardias verificables:
+1. **Guardia de Negación y Operadores:** Cambios de negación o signos invalidan el acierto de caché (`"NO"`).
+2. **Invalidador Temporal:** Nuevos bloques del profesor invalidan respuestas cacheadas previas al cambio de contexto.
+3. **`Single-Flight Coalescing` (`IN_FLIGHT_QUERIES`):** Deduplica consultas simultáneas idénticas de múltiples estudiantes en una sola inferencia.
+4. **Bypass Automático de Seguimiento (`isFollowUpQuestion()`):** Toda pregunta con **`quotedContext`** (Quote-Reply), historial previo (`chatHistory`) o anáforas de seguimiento omite la caché automáticamente.
 
-### C. Economía de Escala: API Cloud vs. GPUs Dedicadas de Facultad (`vLLM`)
-Con **Prefix KV-Caching (~92% de prefijo compartido)** porque toda la sala comparte sistema + transcript + slides:
-
-| Arquitectura (40 salas/día) | CapEx Inicial | OpEx Mensual | TCO 3 Años | Soberanía de Datos |
-|---|---|---|---|---|
-| **API Cloud Comercial** | \$0 | ~\$1.500–\$2.500 USD | ~\$54.000–\$90.000 USD | Datos salen a servidores externos |
-| **GPU Facultad (`vLLM`: 2× RTX 4090 / 1× L40S)** | ~\$6.500–\$12.000 USD | ~\$95 USD electricidad | **~\$10.000–\$15.400 USD (>75% ahorro)** | **100% Red Campus** (y de noche corre investigación) |
-
-*(Separación actual del prototipo en nube gratuita: 6 buckets independientes entre `whisper-large-v3`, `whisper-large-v3-turbo`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b`, `openai/gpt-oss-120b` y failover rápido `gemini-3.5-flash-lite` en `<1s`.)*
+### C. Tokenomics, Prefix KV-Caching y Stack de Modelos
+- **Orden del prompt pensado para Prefix KV-Caching:** Contexto estático y transcripción primero; **`quotedContext` y los últimos 2 turnos de `chatHistory` al final**, maximizando reutilización de prefijo en infraestructura institucional (`vLLM` en GPU de facultad vs. API cloud comercial).
+- **Pool de modelos verificado en V4:**
+  - **STT (con solapamiento de 1.0s):** `whisper-large-v3` -> `whisper-large-v3-turbo` -> `gemini-3.5-flash-lite`.
+  - **Micro-labeler:** `openai/gpt-oss-20b`.
+  - **Tutor IA:** Priorizado **`openai/gpt-oss-120b` -> `qwen/qwen3.8-27b` -> `gemini-3.5-flash-lite`** (todos con `AbortSignal.timeout(15000)`). Este orden priorizó precisión conceptual y disponibilidad real en pruebas (ej. identificando correctamente desplazamiento de curva `LM` ante alza de `TPM` en Chile).
 
 ---
 
-## 6. Resultados de la Prueba Extendida (5+ Minutos y 6 Casos Límite)
+## 6. Validación Empírica: Línea Base V3 (5m) + Clase Real en Pizarra V4 (3m)
 
-Para validar robustez antes del martes se ejecutó una simulación continua de **5 minutos reales (`Modelo IS-LM - Explicado para principiantes!.mp3`, 37 fragmentos de audio de 8s)** seguida de **6 casos límite adversarios** (`stress_test_v3.mjs`).
+### A. Línea Base V3 (Clase Grabada Continua de 5m06s — *IS-LM*)
+- 37 fragmentos reales: `693` palabras, `12` capítulos, latencia promedio `993 ms` (máx. `1577 ms`) y **`12/12 PASS`** en casos límite (analogías, premisa falsa, deixis temporal, ráfagas y cierre post-clase).
 
-### Bugs Reales que Expuso la Simulación Larga (y Fueron Corregidos)
-Las pruebas largas destaparon 7 fallos reales que no aparecían en pruebas unitarias cortas:
-1. **Timeouts colgados y modelo Gemini caído:** `fetch` a APIs externas no tenía timeout y `gemini-3.8-flash` superaba 15s; se reemplazó Bucket 6 por **`gemini-3.5-flash-lite` (~991ms)** + `AbortSignal.timeout(15000)` en todos los llamados.
-2. **Alucinación `"Música"` al final del video (04:56):** Whisper devolvía `"Música"` sobre la cortina musical final; añadida a `WHISPER_SILENCE_HALLUCINATIONS`.
-3. **Saturación TPM en ráfagas y post-cierre (`429`):** Al acumular >35 bloques, el prompt + `generateClassSummary` excedía los `8.000 TPM` de Groq Free Tier; solucionado con compactación inteligente (`>18` bloques -> últimos 12 + máx 8 históricos clave, ~55% menos tokens), `Single-Flight Coalescing` y failover inmediato a `gemini-3.5-flash-lite`.
-4. **Falso `digresión` en analogía bajo fallback `429`:** La heurística local marcaba `"fútbol"` como digresión y no reconocía avisos de `"paraguas/portería"`; corregido con escudo de vocabulario académico en `detectHeuristicCategory()`.
-5. **Truncamiento en respuestas rápidas:** Modelos con razonamiento interno consumían `max_tokens: 380` cortando la frase final; ampliado a `900` (`active`) / `1800` (`full_ia`) manteniendo la concisión vía prompt.
-6. **Smart Chapters ausentes en simulador:** `/api/simulator/step-chunk` no invocaba el generador de capítulos compartido con `/api/live/audio-chunk`.
-7. **Premisa falsa rechazada o devuelta sin cuerpo:** Ante *"Como el profesor dijo que la curva IS tiene pendiente positiva..."*, el LLM primero la rechazó como `🚫 off_topic` y luego emitió `@@VOZ_ALTA@@` sin explicación previa; resuelto reordenando prioridad académica primero + guardia determinista `hasCourseAcademicKeyword()` + guardia de cuerpo mínimo antes de `@@VOZ_ALTA@@`.
+### B. Validación Final V4 (Audio Real de Clase en Pizarra + Suite V4 — *Análisis Matemático en Pizarra*)
+Evaluado sobre 3 minutos reales de aula presencial con pizarra y ruido ambiente (`TLh_6G7i4_w`, `03:00–06:00`, 35 chunks con solapamiento, `eval_v4_report.json`):
 
-### Métricas Finales Verificadas (`stress_report_v3.json` — 12/12 PASS)
-
-| Métrica / Caso Límite Evaluado | Resultado Verificado | Estado |
+| Evaluación V4 Verificada | Resultado Observado | Estado |
 |---|---|---|
-| **Clase continua 5m06s (37 chunks audio real)** | `693` palabras, `12` capítulos inteligentes (`00:00` a `04:32`), **0 alucinación `"Música"`** | ✅ PASS |
-| **Latencia de procesamiento por chunk (Whisper + Label + Sync)** | Promedio **`993 ms`** • Máxima **`1577 ms`** | ✅ PASS |
-| **Caso 1 — Analogía pedagógica (*fútbol/huevos + riesgo*)** | Etiquetada `concepto_clave` (no `digresion`), incluso con `429` en Groq | ✅ PASS |
-| **Caso 2 — Digresión logística (*paraguas en portería*)** | Etiquetada correctamente como `digresion` | ✅ PASS |
-| **Caso 3 — Premisa falsa (*"IS tiene pendiente positiva..."*)** | Corrige explícitamente: pendiente **negativa**, inversión y PIB disminuyen `[VIVO-24]` `[SLIDE-1]` | ✅ PASS |
-| **Caso 4 — Deixis temporal (*"lo último que dijo recién"*)** | Sintetiza los últimos bloques completos `[VIVO-36]` sin truncarse | ✅ PASS |
-| **Caso 5 — Ráfaga concurrente (5 queries simultáneas)** | Repetidas x2 `fromCache: true`, Negación `"NO"` hace bypass (`fromCache: false`), Off-topic bloqueado (`canForwardToTeacher: false`), Multiplicador respondido sin HTTP 500 | ✅ PASS |
-| **Caso 6 — `🟣 Full IA` en vivo + Cierre + Post-Clase + Insights** | En vivo `Full IA` OK (`3336` chars), Post-Clase `Full IA` OK (`2945` chars), `qaLog`: **8 En Vivo / 1 Post-Clase** + `longitudinalInsights` presentes | ✅ PASS |
-| **Inspección visual navegador (`/profesor` -> `📈 Data & Insights`)** | Modal oscuro sin clipping ni errores JS (`0` errores), `🟣 Full IA` activo y `12` capítulos visibles | ✅ PASS |
+| **Audio real en pizarra (35 chunks con solapamiento)** | `35` entradas, `497` palabras, **`88%` cobertura frente a VTT** | PASS |
+| **Latencia STT + Merge + Label + Capítulos** | **`893 ms` promedio** • `1736 ms` máxima | PASS |
+| **Capítulos y Cero Exclusión** | `2` capítulos limpios (`00:00 Apertura y Objetivos`, `00:20 Límite y Continuidad`), **0 descartes por `digresion`** | PASS |
+| **Agnosticismo dinámico (`FI2002 — Electromagnetismo`)** | Curso creado vía API y match automático con `Lámina 2: Ley de Lenz` | PASS |
+| **Modo `Full IA` en Vivo (sin cerrar clase)** | Respuesta completa con **`classClosed === false`** y Radar operativo | PASS |
+| **Precisión conceptual (`TPM Chile`)** | Determina correctamente que sube tasa real y **desplaza `LM` a la izquierda** | PASS |
+| **Quote-Reply + Prerequisito + Caché/Negación + Filtro** | Quote-Reply (`fromCache: false`), prerequisito algebraico respondido, caché + bypass por negación `"NO"`, Netflix bloqueado `off_topic` | PASS |
+| **Cierre a Post-Clase y Trazabilidad** | `classClosed === true`, `qaLog`: **`totalValid: 8` (`inClass: 7` / `postClass: 1`)** | PASS |
+| **Suite automatizada V4 (`eval_v4_report.json`)** | **`11/11` pruebas aprobadas (`ALL PASSED: true`)** | PASS |
+| **Auditoría visual en navegador (`1280×800` y `390×844`)** | `0` errores de consola; `/profesor` reducido a `3` tarjetas; `/estudiante` móvil con `.topbar` de `48px` y **Quote-Reply** funcional | PASS |
+
+**Matices transparentes observados (bueno transparentarlo si hay preguntas técnicas):**
+1. Aun acertando la conclusión (`desplaza LM a la izquierda`), en una respuesta puntual de `TPM Chile` el modelo mencionó *"demanda de dinero"* en vez de *"oferta monetaria / liquidez"*, reforzando la importancia de mostrar siempre citas de clase al alumno.
+2. En vista móvil muy estrecha (`390px`), un nombre largo de curso (`Mac...`) se trunca al lado del indicador `En vivo · Seguimiento` dentro del header de `48px`.
 
 ---
 
-## 7. Guión Sugerido de Demo en Vivo (5 Minutos el Martes)
+## 7. Guión Sugerido de Demo en Vivo (5 Minutos)
 
-1. **Minuto 0:00–1:00 — El Problema y la Filosofía ("Cero fricción + Participación"):**
-   - Mostrar `/profesor` y explicar: *"Prender y olvidarse. No competimos por reemplazar al profe, sino por devolverle al alumno la confianza para levantar la mano y al profe el pulso silencioso de la sala."*
-2. **Minuto 1:00–2:15 — Voz Real + U-Cursos Auto-Sync + Zoom/ sala (`Finanzas CAPM/WACC/VAN`):**
-   - Seleccionar `IN5233 — Finanzas` en `/simulador` (o `/profesor` + `/estudiante`) y avanzar 2–3 chunks reales de audio: mostrar transcripción en `<1s`, mapeo automático `[SLIDE-1/2/3]` y `📌 Ojo Control`. Mostrar la pestaña `💻 Virtual (Zoom/Meet)` para videollamadas.
-3. **Minuto 2:15–3:30 — Pregunta en Vivo + Guardia Anti-Sesgo + Radar Auto-Resuelto:**
-   - En Estudiante, preguntar *"¿Qué riesgo mide la beta bajo el CAPM?"* -> mostrar respuesta de **2–3 líneas + caja verde "Para levantar la mano / Copiar para Zoom"**.
-   - Preguntar *"¿Por qué la beta **NO** mide el riesgo idiosincrático?"* -> mostrar que la **Guardia de Negación** no devuelve caché sesgado.
-   - Simular pulsos `⚡ Me perdí` -> ver el **Radar de Pizarra** y cómo al avanzar el audio donde el profe lo explica, **se auto-resuelve sin tocar la pantalla**.
-4. **Minuto 3:30–4:30 — `🏁 Terminar Clase` ➔ `🟣 Full IA` + Apunte Vivo & Data Opcional:**
-   - Pulsar `🏁 Terminar Clase` (aclarando que `🟣 Full IA` también puede abrirse durante la clase cuando el profe quiera). Mostrar cómo el estudiante se desbloquea a respuestas profundas con LaTeX.
-   - Abrir `📘 Apunte Vivo`: mostrar las 3 pestañas (`Apunte Vivo`, `Pauta Auxiliar` y `📈 Data & Insights (Opcional)` con la comparativa inter-semestral).
-5. **Minuto 4:30–5:00 — Privacidad Explícita, Tokenomics GPU y Validación:**
-   - Abrir `🛡️ Audio Efímero • Anónimo`: explicar Audio Efímero 0s, Anonimato 2 Capas, `vLLM` + Prefix Cache (92%) en 2× RTX 4090 / 1× L40S (>75% ahorro TCO), Trade-off *Soft-Tagging* en digresiones y el resultado **12/12 PASS** en clase simulada de 5 minutos.
+1. **Minuto 0:00–1:00 — Problema y Filosofía:**
+   - Mostrar `/profesor` limpia (3 tarjetas, botón protagonista **Iniciar Clase**): *"Prender y olvidarse; no reemplazamos la mano alzada, la habilitamos."*
+2. **Minuto 1:00–2:15 — Voz Real, Capítulos Agnósticos y Cero Exclusión:**
+   - Mostrar cómo la transcripción solapada (`1.0s`) arma capítulos limpios y clasifica en 4 categorías sin borrar historias o analogías del docente (y mencionar que funciona igual en un curso recién creado como `FI2002 Electromagnetismo` o en clases virtuales Zoom/Meet).
+3. **Minuto 2:15–3:30 — Experiencia Estudiante (Seguimiento + Quote-Reply + Radar):**
+   - En `/estudiante` (o vista móvil / `/simulador`), enviar una pregunta en `Seguimiento` y luego hacer **Citar (Quote-Reply)** sobre la respuesta del tutor o sobre un bloque del transcript para profundizar una parte puntual.
+   - Destacar cómo las dudas alimentan el Radar del docente/auxiliar de forma anónima.
+4. **Minuto 3:30–4:30 — `Full IA` en Vivo vs. `Terminar Clase` (Post-Clase):**
+   - Activar `Full IA` en vivo demostrando que la clase sigue abierta y el Radar activo; luego presionar **Terminar Clase** para mostrar la transición a **Post-Clase · Full IA** y la cápsula con desglose `inClass` / `postClass` + uso opcional entre semestres.
+5. **Minuto 4:30–5:00 — Privacidad, Tokenomics y Evidencia:**
+   - Mostrar la trazabilidad sin cuentas, Prefix KV-Caching + cachés con guardia de negación/seguimiento, y cerrar con los resultados reales: **`88%` cobertura VTT en clase real de pizarra, `893 ms` de latencia media y `11/11 PASS` (`ALL PASSED: true`)**.
+   - *(Respaldo técnico en Git: tag inmutable `v3.1-stable` disponible para rollback instantáneo en `git checkout v3.1-stable`).*

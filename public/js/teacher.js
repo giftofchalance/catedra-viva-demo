@@ -1,9 +1,22 @@
 /**
- * Script del Panel del Profesor / Auxiliar y Transmisor de Audio (Cátedra Viva V3)
+ * Script del Panel Docente V4:
+ * - Revelación progresiva para 3 arquetipos docentes
+ * - Grabación con overlap acústico de 1.0s para evitar palabras cortadas
+ * - Render incremental del feed vía SSE sin secuestrar el scroll
+ * - Creación dinámica de cursos agnósticos y toasts no bloqueantes
  */
 
+import {
+  icon,
+  hydrateSvgIcons,
+  escapeHtml,
+  showToast,
+  connectLiveStateSync
+} from './icons.js';
+
 let isRecording = false;
-let audioSourceMode = 'mic'; // 'mic' | 'virtual'
+let isPausedRecording = false;
+let audioSourceMode = 'mic';
 let mediaStream = null;
 let audioContext = null;
 let analyserNode = null;
@@ -13,63 +26,70 @@ let timerInterval = null;
 let lectureSeconds = 0;
 let isSimulating = false;
 let simulationInterval = null;
-let activeRecorder = null;
+let activeRecorders = new Set();
 let uploadQueue = Promise.resolve();
+
 let latestAlertClusterId = null;
 let latestCapsuleData = null;
-let activeCapsuleTab = 'apunte'; // 'apunte' | 'pauta'
+let activeCapsuleTab = 'apunte';
+let resetConfirmArmed = false;
 
-// DOM Elements
-const teacherCourseTitle = document.getElementById('teacherCourseTitle');
-const btnToggleMic = document.getElementById('btnToggleMic');
-const micIcon = document.getElementById('micIcon');
+let renderedFeedSignature = '';
+let renderedEntryCache = new Map();
+
+// DOM
+const teacherCourseSelect = document.getElementById('teacherCourseSelect');
+const btnOpenNewCourse = document.getElementById('btnOpenNewCourse');
+const newCourseModal = document.getElementById('newCourseModal');
+const btnCloseNewCourse = document.getElementById('btnCloseNewCourse');
+const newCourseForm = document.getElementById('newCourseForm');
+
+const audioSourceControl = document.getElementById('audioSourceControl');
 const micStatusText = document.getElementById('micStatusText');
 const micTimerDisplay = document.getElementById('micTimerDisplay');
 const vuBar = document.getElementById('vuBar');
-const anchorStatusBadge = document.getElementById('anchorStatusBadge');
-const btnSimulateOneMin = document.getElementById('btnSimulateOneMin');
-const btnEndClassQuick = document.getElementById('btnEndClassQuick');
-const audioSourceControl = document.getElementById('audioSourceControl');
 
-const ucursosDeckLabel = document.getElementById('ucursosDeckLabel');
-const ucursosSlidesList = document.getElementById('ucursosSlidesList');
-const chaptersList = document.getElementById('chaptersList');
-const feedList = document.getElementById('feedList');
-const feedEmptyState = document.getElementById('feedEmptyState');
-const btnResetLecture = document.getElementById('btnResetLecture');
-
-const statWpm = document.getElementById('statWpm');
-const statWords = document.getElementById('statWords');
-const statLostCount = document.getElementById('statLostCount');
-const paceBadge = document.getElementById('paceBadge');
+const heroControlsIdle = document.getElementById('heroControlsIdle');
+const heroControlsLive = document.getElementById('heroControlsLive');
+const btnStartClass = document.getElementById('btnStartClass');
+const btnPauseMic = document.getElementById('btnPauseMic');
+const btnEndClass = document.getElementById('btnEndClass');
+const btnEndClassIdle = document.getElementById('btnEndClassIdle');
 
 const chatModeControl = document.getElementById('chatModeControl');
 const modeDescText = document.getElementById('modeDescText');
 const checkComplement = document.getElementById('checkComplement');
-const checkDigressions = document.getElementById('checkDigressions');
-const btnCloseClass = document.getElementById('btnCloseClass');
-const btnDownloadTaGuide = document.getElementById('btnDownloadTaGuide');
-const clustersList = document.getElementById('clustersList');
-const radarTotalBadge = document.getElementById('radarTotalBadge');
-const teacherCourseSelect = document.getElementById('teacherCourseSelect');
 
-// Alert Banner
-const boardAlertBanner = document.getElementById('boardAlertBanner');
-const boardAlertText = document.getElementById('boardAlertText');
+const radarHeroBox = document.getElementById('radarHeroBox');
+const radarHeroPill = document.getElementById('radarHeroPill');
+const radarHeroContent = document.getElementById('radarHeroContent');
+const radarHeroActions = document.getElementById('radarHeroActions');
 const btnAlertResolve = document.getElementById('btnAlertResolve');
 const btnAlertForTa = document.getElementById('btnAlertForTa');
 
-// Telemetry & Privacy
-const telemetryPrivacyCount = document.getElementById('telemetryPrivacyCount');
-const telemetryTokenSaved = document.getElementById('telemetryTokenSaved');
-const telemetryGpuVsCloud = document.getElementById('telemetryGpuVsCloud');
-const privacyPillText = document.getElementById('privacyPillText');
-const btnOpenPrivacy = document.getElementById('btnOpenPrivacy');
-const privacyModal = document.getElementById('privacyModal');
-const btnClosePrivacy = document.getElementById('btnClosePrivacy');
-const modalDeletedChunks = document.getElementById('modalDeletedChunks');
+const workspaceTabsControl = document.getElementById('workspaceTabsControl');
+const workTabFeed = document.getElementById('workTabFeed');
+const workTabSlides = document.getElementById('workTabSlides');
+const workTabTa = document.getElementById('workTabTa');
 
-// QR Modal
+const btnSimulateOneMin = document.getElementById('btnSimulateOneMin');
+const btnResetLecture = document.getElementById('btnResetLecture');
+const feedList = document.getElementById('feedList');
+const feedEmptyState = document.getElementById('feedEmptyState');
+
+const ucursosDeckLabel = document.getElementById('ucursosDeckLabel');
+const ucursosSlidesList = document.getElementById('ucursosSlidesList');
+const chaptersList = document.getElementById('chaptersList');
+const addMaterialForm = document.getElementById('addMaterialForm');
+
+const statWpm = document.getElementById('statWpm');
+const statWords = document.getElementById('statWords');
+const statLostCount = document.getElementById('statLostCount');
+const clustersList = document.getElementById('clustersList');
+const radarTotalBadge = document.getElementById('radarTotalBadge');
+const btnDownloadTaGuide = document.getElementById('btnDownloadTaGuide');
+
+// Modales
 const btnShowQr = document.getElementById('btnShowQr');
 const qrModal = document.getElementById('qrModal');
 const btnCloseQr = document.getElementById('btnCloseQr');
@@ -77,7 +97,6 @@ const qrSvgContainer = document.getElementById('qrSvgContainer');
 const qrUrlDisplay = document.getElementById('qrUrlDisplay');
 const btnCopyStudentUrl = document.getElementById('btnCopyStudentUrl');
 
-// Capsule Modal
 const btnOpenCapsule = document.getElementById('btnOpenCapsule');
 const capsuleModal = document.getElementById('capsuleModal');
 const capsuleTabsControl = document.getElementById('capsuleTabsControl');
@@ -85,29 +104,51 @@ const btnCloseCapsule = document.getElementById('btnCloseCapsule');
 const capsuleBody = document.getElementById('capsuleBody');
 const btnDownloadCapsule = document.getElementById('btnDownloadCapsule');
 
+const btnOpenPrivacy = document.getElementById('btnOpenPrivacy');
+const privacyModal = document.getElementById('privacyModal');
+const btnClosePrivacy = document.getElementById('btnClosePrivacy');
+const modalDeletedChunks = document.getElementById('modalDeletedChunks');
+const modalTokenomicsLine = document.getElementById('modalTokenomicsLine');
+
 const MODE_DESCRIPTIONS = {
-  paused: '🟡 Pausa temporal para atención en pizarra. Las dudas se acumulan en el Radar.',
-  active: '🟢 En vivo: respuestas breves (2–3 líneas) + frase lista para levantar la mano.',
-  full_ia: '🟣 Post-Clase / Full IA: tutoría profunda paso a paso conectada a slides e historial.'
+  paused: 'Chat en pausa para atención 100% en pizarra. Las dudas se acumulan en el Radar.',
+  active: 'En vivo: respuestas de 2–3 líneas + frase lista para preguntar en sala o Zoom.',
+  full_ia: 'Full IA: respuestas completas y derivaciones sin restricción de longitud.'
 };
 
 async function initTeacher() {
+  hydrateSvgIcons();
+  await refreshCoursesDropdown();
   await fetchState();
   bindEvents();
-  setInterval(fetchState, 3000);
+  connectLiveStateSync(fetchState);
+}
+
+async function refreshCoursesDropdown(selectedId = null) {
+  try {
+    const data = await fetch('/api/courses').then(r => r.json());
+    const targetId = selectedId || data.activeCourseId;
+    teacherCourseSelect.innerHTML = '';
+    (data.courses || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = `${c.code} — ${c.name}`;
+      if (c.id === targetId) opt.selected = true;
+      teacherCourseSelect.appendChild(opt);
+    });
+  } catch (_) {}
 }
 
 function bindEvents() {
-  btnToggleMic.addEventListener('click', () => {
-    if (!isRecording) startRecording();
-    else stopRecording();
-  });
+  btnStartClass.addEventListener('click', startRecording);
+  btnPauseMic.addEventListener('click', togglePauseRecording);
+  btnEndClass.addEventListener('click', handleEndClassOneClick);
+  btnEndClassIdle.addEventListener('click', handleEndClassOneClick);
 
-  // Selector Fuente de Audio: Micrófono Sala vs Virtual (Zoom/Meet)
   audioSourceControl.querySelectorAll('.seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       if (isRecording) {
-        alert('Detén la transmisión actual antes de cambiar de fuente de audio.');
+        showToast('Detén la captura actual antes de cambiar de fuente.', 'warn');
         return;
       }
       audioSourceMode = btn.getAttribute('data-source');
@@ -115,13 +156,21 @@ function bindEvents() {
       btn.classList.add('active-source');
       micStatusText.textContent = audioSourceMode === 'virtual'
         ? 'Listo para capturar audio de Zoom/Meet'
-        : 'Micrófono en espera';
+        : 'En espera para iniciar';
     });
   });
 
-  btnSimulateOneMin.addEventListener('click', toggleSimulatedLecture);
+  workspaceTabsControl.querySelectorAll('.seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.getAttribute('data-worktab');
+      workspaceTabsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active-tab'));
+      btn.classList.add('active-tab');
+      workTabFeed.classList.toggle('active', tab === 'feed');
+      workTabSlides.classList.toggle('active', tab === 'slides');
+      workTabTa.classList.toggle('active', tab === 'ta');
+    });
+  });
 
-  // Selector Segmented de 3 Modos
   chatModeControl.querySelectorAll('.seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const mode = btn.getAttribute('data-mode');
@@ -131,26 +180,32 @@ function bindEvents() {
   });
 
   checkComplement.addEventListener('change', () => updateTeacherSettings());
-  checkDigressions.addEventListener('change', () => updateTeacherSettings());
+
+  btnSimulateOneMin.addEventListener('click', toggleSimulatedLecture);
 
   btnResetLecture.addEventListener('click', async () => {
-    if (confirm('¿Deseas reiniciar la transcripción y el radar de la clase activa?')) {
-      await fetch('/api/live/reset', { method: 'POST' });
-      lectureSeconds = 0;
-      micTimerDisplay.textContent = '00:00';
-      feedList.innerHTML = '';
-      feedList.appendChild(feedEmptyState);
-      feedEmptyState.style.display = 'block';
-      fetchState();
+    if (!resetConfirmArmed) {
+      resetConfirmArmed = true;
+      btnResetLecture.innerHTML = `${icon('alert', 13)}<span>¿Confirmar?</span>`;
+      setTimeout(() => {
+        resetConfirmArmed = false;
+        btnResetLecture.innerHTML = `${icon('trash', 13)}<span>Reiniciar</span>`;
+      }, 3000);
+      return;
     }
+    resetConfirmArmed = false;
+    btnResetLecture.innerHTML = `${icon('trash', 13)}<span>Reiniciar</span>`;
+    await fetch('/api/live/reset', { method: 'POST' });
+    lectureSeconds = 0;
+    micTimerDisplay.textContent = '00:00';
+    renderedFeedSignature = '';
+    renderedEntryCache.clear();
+    feedList.querySelectorAll('.feed-item').forEach(el => el.remove());
+    feedEmptyState.style.display = 'block';
+    showToast('Sesión reiniciada', 'success');
+    fetchState();
   });
 
-  btnCloseClass.addEventListener('click', handleEndClassOneClick);
-  if (btnEndClassQuick) {
-    btnEndClassQuick.addEventListener('click', handleEndClassOneClick);
-  }
-
-  // Atajo Tecla P para activar/desactivar Modo Pizarra al instante
   document.addEventListener('keydown', (e) => {
     const tag = document.activeElement?.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
@@ -160,6 +215,7 @@ function bindEvents() {
       const next = current === 'paused' ? 'active' : 'paused';
       setActiveModeUI(next);
       updateTeacherSettings(next);
+      showToast(next === 'paused' ? 'Modo Pizarra activado' : 'Seguimiento reactivado');
     }
   });
 
@@ -170,8 +226,8 @@ function bindEvents() {
       if (data.capsule) {
         downloadMarkdownFile(`Pauta_Auxiliar_${data.capsule.courseCode}.md`, data.capsule.taGuideMarkdown);
       }
-    } catch (e) {
-      alert('No se pudo exportar la pauta: ' + e.message);
+    } catch (_) {
+      showToast('No se pudo descargar la pauta', 'warn');
     }
   });
 
@@ -184,13 +240,58 @@ function bindEvents() {
     });
     lectureSeconds = 0;
     micTimerDisplay.textContent = '00:00';
-    feedList.innerHTML = '';
-    feedList.appendChild(feedEmptyState);
+    renderedFeedSignature = '';
+    renderedEntryCache.clear();
+    feedList.querySelectorAll('.feed-item').forEach(el => el.remove());
     feedEmptyState.style.display = 'block';
     fetchState();
   });
 
-  // Alert Banner Actions
+  // Nueva asignatura modal
+  btnOpenNewCourse.addEventListener('click', () => newCourseModal.classList.add('active'));
+  btnCloseNewCourse.addEventListener('click', () => newCourseModal.classList.remove('active'));
+  newCourseForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      code: document.getElementById('ncCode').value.trim(),
+      name: document.getElementById('ncName').value.trim(),
+      instructor: document.getElementById('ncInstructor').value.trim() || 'Docente',
+      slidesText: document.getElementById('ncSlidesText').value
+    };
+    const res = await fetch('/api/courses/custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.course) {
+      await refreshCoursesDropdown(data.course.id);
+      newCourseModal.classList.remove('active');
+      newCourseForm.reset();
+      renderedFeedSignature = '';
+      renderedEntryCache.clear();
+      feedList.querySelectorAll('.feed-item').forEach(el => el.remove());
+      feedEmptyState.style.display = 'block';
+      showToast(`Sala creada para ${data.course.code}`, 'success');
+      fetchState();
+    }
+  });
+
+  // Agregar material rápido en sesión
+  addMaterialForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = document.getElementById('matTitleInput').value.trim();
+    const content = document.getElementById('matContentInput').value.trim();
+    if (!content) return;
+    await fetch('/api/materials/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title || 'Material en Sesión', content })
+    });
+    addMaterialForm.reset();
+    showToast('Material agregado al contexto del tutor', 'success');
+  });
+
   btnAlertResolve.addEventListener('click', () => {
     if (latestAlertClusterId) handleClusterAction(latestAlertClusterId, 'resolved');
   });
@@ -198,7 +299,6 @@ function bindEvents() {
     if (latestAlertClusterId) handleClusterAction(latestAlertClusterId, 'for_ta');
   });
 
-  // Modales
   btnShowQr.addEventListener('click', async () => {
     const studentUrl = `${window.location.origin}/estudiante`;
     qrUrlDisplay.textContent = studentUrl;
@@ -207,15 +307,14 @@ function bindEvents() {
       const svgText = await fetch(`/api/qr?url=${encodeURIComponent(studentUrl)}`).then(r => r.text());
       qrSvgContainer.innerHTML = svgText;
     } catch (_) {
-      qrSvgContainer.innerHTML = `<div style="padding:1rem;color:#0F172A;font-size:0.8rem;">${studentUrl}</div>`;
+      qrSvgContainer.textContent = studentUrl;
     }
   });
   btnCloseQr.addEventListener('click', () => qrModal.classList.remove('active'));
   btnCopyStudentUrl.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(qrUrlDisplay.textContent);
-      btnCopyStudentUrl.textContent = '✓ Enlace copiado al portapapeles';
-      setTimeout(() => { btnCopyStudentUrl.textContent = '📋 Copiar Enlace de la Clase'; }, 2000);
+      showToast('Enlace copiado para Zoom/Meet', 'success');
     } catch (_) {}
   });
 
@@ -228,16 +327,14 @@ function bindEvents() {
       capsuleModal.classList.add('active');
     }
   });
-  if (capsuleTabsControl) {
-    capsuleTabsControl.querySelectorAll('.seg-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeCapsuleTab = btn.getAttribute('data-tab');
-        capsuleTabsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active-source'));
-        btn.classList.add('active-source');
-        if (latestCapsuleData) renderCapsuleModal(latestCapsuleData);
-      });
+  capsuleTabsControl.querySelectorAll('.seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activeCapsuleTab = btn.getAttribute('data-tab');
+      capsuleTabsControl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active-source'));
+      btn.classList.add('active-source');
+      if (latestCapsuleData) renderCapsuleModal(latestCapsuleData);
     });
-  }
+  });
   btnCloseCapsule.addEventListener('click', () => capsuleModal.classList.remove('active'));
   btnDownloadCapsule.addEventListener('click', () => {
     if (!latestCapsuleData) return;
@@ -274,13 +371,13 @@ function setActiveModeUI(mode) {
 async function handleEndClassOneClick() {
   if (isRecording) stopRecording();
   if (isSimulating) stopSimulation();
-  btnCloseClass.disabled = true;
-  if (btnEndClassQuick) btnEndClassQuick.disabled = true;
-  if (btnEndClassQuick) btnEndClassQuick.textContent = '⏳ Activando Full IA...';
+  btnEndClass.disabled = true;
+  btnEndClassIdle.disabled = true;
   try {
     const res = await fetch('/api/teacher/close-class', { method: 'POST' });
     const data = await res.json();
     await fetchState();
+    showToast('Clase finalizada y Modo Post-Clase Full IA activado', 'success');
     if (data.capsule) {
       latestCapsuleData = data.capsule;
       activeCapsuleTab = 'apunte';
@@ -288,28 +385,23 @@ async function handleEndClassOneClick() {
       capsuleModal.classList.add('active');
     }
   } catch (e) {
-    alert('Error finalizando clase: ' + e.message);
+    showToast('Error al finalizar la clase: ' + e.message, 'warn');
   } finally {
-    btnCloseClass.disabled = false;
-    if (btnEndClassQuick) {
-      btnEndClassQuick.disabled = false;
-      btnEndClassQuick.textContent = '🏁 Terminar Clase';
-    }
+    btnEndClass.disabled = false;
+    btnEndClassIdle.disabled = false;
   }
 }
 
 async function updateTeacherSettings(forcedMode = null) {
   const activeBtn = chatModeControl.querySelector('.seg-btn.active');
   const currentMode = forcedMode || (activeBtn ? activeBtn.getAttribute('data-mode') : 'active');
-  const payload = {
-    chatState: currentMode,
-    allowComplement: checkComplement.checked,
-    hideDigressions: checkDigressions.checked
-  };
   await fetch('/api/teacher/settings', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({
+      chatState: currentMode,
+      allowComplement: checkComplement.checked
+    })
   });
 }
 
@@ -324,80 +416,89 @@ async function handleClusterAction(clusterId, status) {
 
 async function fetchState() {
   try {
-    const res = await fetch('/api/live/state');
-    const state = await res.json();
+    const state = await fetch('/api/live/state').then(r => r.json());
     const course = state.course;
 
-    teacherCourseTitle.textContent = `${course.code}: ${course.name}`;
-    teacherCourseSelect.value = course.id;
+    if (teacherCourseSelect.value !== course.id) {
+      await refreshCoursesDropdown(course.id);
+    }
 
-    // Sincronizar switches y modos
     setActiveModeUI(state.teacherSettings.chatState || 'active');
     checkComplement.checked = state.teacherSettings.allowComplement;
-    checkDigressions.checked = state.teacherSettings.hideDigressions;
 
-    // Métricas Read.ai
     statWpm.textContent = `${state.pace.currentWpm} PPM`;
     statWords.textContent = state.pace.totalWords;
     statLostCount.textContent = state.lostCountTotal;
-    paceBadge.textContent = state.pace.currentWpm > 0
-      ? (state.pace.paceStatus === 'rapido' ? '⚠️ Rápido' : '✓ Óptimo')
-      : 'En espera';
 
-    // Slides de U-Cursos & slide activa detectada
     renderUCursosSlides(course.ucursosSync, state.entries);
-
-    // Capítulos
     renderChapters(state.chapters);
-
-    // Radar Clustering + Banner Superior de Pizarra
     renderTopicClusters(state.topicClusters || []);
-    updateBoardAlertBanner(state.topicClusters || [], state.lostCountTotal);
+    updateRadarHero(state.topicClusters || [], state.lostCountTotal);
 
-    // Telemetría Tokenomics y Privacidad Efímera
     const tk = state.tokenomics || {};
     const deletedCount = tk.ephemeralChunksDeleted || 0;
     const savedTok = tk.prefixTokensSaved || 0;
-    const onPremUsd = (tk.onPremCostUsd || 0).toFixed(4);
-    const cloudUsd = (tk.cloudCostUsd || 0).toFixed(4);
-    telemetryPrivacyCount.textContent = `🛡️ ${deletedCount} chunks audio borrados (<1s)`;
-    telemetryTokenSaved.textContent = `⚡ Prefix/Cache: ${savedTok.toLocaleString()} tok ahorrados (${tk.cacheHits || 0} hits)`;
-    telemetryGpuVsCloud.textContent = `🖥️ GPU U: $${onPremUsd} vs Cloud $${cloudUsd}`;
-    privacyPillText.textContent = `Efímero (${deletedCount} borrados) • Anónimo`;
     if (modalDeletedChunks) modalDeletedChunks.textContent = deletedCount;
+    if (modalTokenomicsLine) {
+      modalTokenomicsLine.textContent = `Prefix/Cache: ${savedTok.toLocaleString()} tok ahorrados (${tk.cacheHits || 0} hits) · GPU U: $${(tk.onPremCostUsd || 0).toFixed(4)} vs Cloud $${(tk.cloudCostUsd || 0).toFixed(4)}`;
+    }
 
-    // Feed
-    if (state.entries && state.entries.length > 0) {
-      if (feedEmptyState.parentNode === feedList) feedEmptyState.style.display = 'none';
-      renderFeedEntries(state.entries);
+    renderFeedEntries(state.entries || []);
+
+    if (!isRecording && (state.entries?.length > 0 || state.classClosed)) {
+      btnEndClassIdle.className = 'btn btn-purple';
+    } else {
+      btnEndClassIdle.className = 'btn btn-outline';
     }
   } catch (err) {
-    console.warn('Error sincronizando estado del profesor:', err);
+    console.warn('Error sincronizando estado docente:', err);
   }
 }
 
+function updateRadarHero(clusters = [], lostTotal = 0) {
+  const isCleared = (s) => s === 'resolved' || s === 'auto_resolved';
+  const hotCluster = clusters.find(c => !isCleared(c.status) && (c.count >= 2 || c.escalatedCount >= 1 || c.lostCount >= 2));
+  const target = hotCluster || (lostTotal >= 2 ? clusters.find(c => !isCleared(c.status)) : null);
+
+  if (!target) {
+    latestAlertClusterId = null;
+    radarHeroBox.classList.remove('is-hot');
+    radarHeroPill.className = 'conn-pill live';
+    radarHeroPill.textContent = 'En sintonía';
+    radarHeroContent.textContent = 'Sin cuellos de botella abiertos. Si varios alumnos marcan "Me perdí" o preguntan sobre un mismo punto, aparecerá aquí.';
+    radarHeroActions.style.display = 'none';
+    return;
+  }
+
+  latestAlertClusterId = target.id;
+  radarHeroBox.classList.add('is-hot');
+  radarHeroPill.className = 'conn-pill warn';
+  radarHeroPill.textContent = `${target.count} señales`;
+  radarHeroContent.innerHTML = `<strong style="color:var(--text);">${escapeHtml(target.label)}</strong><div style="margin-top:4px; font-size:12px;">${escapeHtml(target.suggestion)}</div>`;
+  radarHeroActions.style.display = 'flex';
+}
+
 function renderUCursosSlides(ucursosSync, entries = []) {
-  if (!ucursosDeckLabel || !ucursosSlidesList) return;
   if (!ucursosSync || !ucursosSync.slides || ucursosSync.slides.length === 0) {
-    ucursosDeckLabel.textContent = 'Sin PPT cargada — Modo Pizarra Libre (Contexto Plano)';
+    ucursosDeckLabel.textContent = 'Sin PPT cargada — Pizarra Libre';
     ucursosSlidesList.innerHTML = '';
     return;
   }
 
-  ucursosDeckLabel.textContent = ucursosSync.deckTitle;
+  ucursosDeckLabel.textContent = ucursosSync.deckTitle || 'Material de clase';
   const lastWithSlide = [...entries].reverse().find(e => e.slideRef && e.slideRef.id);
   const activeSlideId = lastWithSlide ? lastWithSlide.slideRef.id : null;
 
   ucursosSlidesList.innerHTML = '';
   ucursosSync.slides.forEach(sl => {
-    const countForSlide = entries.filter(e => e.slideRef && e.slideRef.id === sl.id).length;
+    const count = entries.filter(e => e.slideRef && e.slideRef.id === sl.id).length;
     const row = document.createElement('div');
     row.className = `slide-pill-item ${activeSlideId === sl.id ? 'is-active' : ''}`;
     row.innerHTML = `
       <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-        <strong>S${sl.number}</strong> · ${sl.title}
+        <strong>L${sl.number}</strong> · ${escapeHtml(sl.title)}
       </span>
-      <span class="tabular-nums" style="font-family:var(--font-mono); font-size:0.68rem; white-space:nowrap; flex-shrink:0;">${countForSlide > 0 ? `${countForSlide} seg` : '—'}</span>
+      <span class="tabular-nums" style="font-family:var(--font-mono); font-size:11px;">${count > 0 ? `${count} seg` : '—'}</span>
     `;
     ucursosSlidesList.appendChild(row);
   });
@@ -407,37 +508,10 @@ function renderChapters(chapters = []) {
   chaptersList.innerHTML = '';
   chapters.forEach(ch => {
     const item = document.createElement('div');
-    item.style.padding = '5px 8px';
-    item.style.background = 'var(--surface-2)';
-    item.style.borderRadius = 'var(--radius-xs)';
-    item.style.borderLeft = '2px solid #38BDF8';
-    item.innerHTML = `
-      <span class="tabular-nums" style="font-family: var(--font-mono); color: #38BDF8; font-weight: 700;">[${ch.minute}]</span>
-      <span style="font-weight: 600;">${ch.title}</span>
-    `;
+    item.style.cssText = 'padding:7px 10px; background:var(--surface-2); border-radius:4px; border-left:2px solid #38BDF8; font-size:13px;';
+    item.innerHTML = `<span class="feed-time">[${escapeHtml(ch.minute)}]</span> <span style="font-weight:600; margin-left:4px;">${escapeHtml(ch.title)}</span>`;
     chaptersList.appendChild(item);
   });
-}
-
-function updateBoardAlertBanner(clusters = [], lostTotal = 0) {
-  const isCleared = (s) => s === 'resolved' || s === 'auto_resolved';
-  const hotCluster = clusters.find(c => !isCleared(c.status) && (c.count >= 2 || c.escalatedCount >= 1 || c.lostCount >= 2));
-  if (!hotCluster && lostTotal < 2) {
-    boardAlertBanner.classList.add('hidden');
-    latestAlertClusterId = null;
-    return;
-  }
-
-  const target = hotCluster || clusters.find(c => !isCleared(c.status));
-  if (!target) {
-    boardAlertBanner.classList.add('hidden');
-    latestAlertClusterId = null;
-    return;
-  }
-
-  latestAlertClusterId = target.id;
-  boardAlertText.textContent = `Tópico "${target.label}" (${target.count} señales / ${target.lostCount} "Me perdí") — ${target.suggestion}`;
-  boardAlertBanner.classList.remove('hidden');
 }
 
 function renderTopicClusters(clusters = []) {
@@ -445,7 +519,7 @@ function renderTopicClusters(clusters = []) {
   radarTotalBadge.textContent = `${totalSignals} señales`;
 
   if (!clusters || clusters.length === 0) {
-    clustersList.innerHTML = `<div style="font-size: 0.76rem; color: var(--text-muted);">Las preguntas repetidas y avisos de "Me perdí" se agruparán automáticamente por tópico aquí.</div>`;
+    clustersList.innerHTML = `<div style="font-size:13px; color:var(--text-muted);">Las señales anónimas y dudas repetidas aparecerán agrupadas aquí.</div>`;
     return;
   }
 
@@ -455,31 +529,25 @@ function renderTopicClusters(clusters = []) {
     const card = document.createElement('div');
     card.className = `cluster-card ${isResolved ? 'is-resolved' : c.status === 'for_ta' ? 'is-ta' : ''}`;
 
-    const lastQ = c.questions && c.questions.length > 0 ? c.questions[c.questions.length - 1] : null;
+    const lastQ = c.questions?.length ? c.questions[c.questions.length - 1] : null;
     const statusBadge = c.status === 'auto_resolved'
-      ? `<span style="color:#6EE7B7;">✓ Retomado por el profe [${c.resolvedAt || ''}]</span>`
+      ? `<span style="color:#6EE7B7;">Retomado [${escapeHtml(c.resolvedAt || '')}]</span>`
       : c.status === 'resolved'
-      ? `<span style="color:#6EE7B7;">✓ Aclarado</span>`
+      ? `<span style="color:#6EE7B7;">Aclarado</span>`
       : c.status === 'for_ta'
-      ? `<span style="color:#C4B5FD;">📌 Para Ayudantía</span>`
-      : `<span style="color:#FCD34D;">🔥 ×${c.count} señales</span>`;
-
-    const extraPulses = [
-      c.fastCount > 0 ? `🐢 ${c.fastCount} ritmo` : '',
-      c.exampleCount > 0 ? `💡 ${c.exampleCount} ejemplo` : ''
-    ].filter(Boolean).join(' • ');
+      ? `<span style="color:#DDD6FE;">Para Ayudantía</span>`
+      : `<span style="color:#FCD34D;">×${c.count} señales</span>`;
 
     card.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:0.74rem; font-weight:700;">
-        <span>${c.label}</span>
-        <span class="tabular-nums">${statusBadge}</span>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:13px; font-weight:700;">
+        <span>${escapeHtml(c.label)}</span>
+        <span class="tabular-nums" style="font-size:12px;">${statusBadge}</span>
       </div>
-      <div style="font-size:0.71rem; color:var(--text-muted); line-height:1.35;">${c.suggestion}</div>
-      ${extraPulses ? `<div style="font-size:0.69rem; color:#93C5FD;">${extraPulses}</div>` : ''}
-      ${lastQ ? `<div style="font-size:0.71rem; color:#CBD5E1; font-style:italic;">Última señal: "${lastQ}"</div>` : ''}
-      <div style="display:flex; gap:5px; margin-top:2px;">
-        <button type="button" class="btn btn-outline btn-xs" data-act="resolved">✓ Aclarado</button>
-        <button type="button" class="btn btn-outline btn-xs" data-act="for_ta">📌 Ayudantía</button>
+      <div style="font-size:12px; color:var(--text-muted);">${escapeHtml(c.suggestion)}</div>
+      ${lastQ ? `<div style="font-size:12px; color:#CBD5E1; font-style:italic;">"${escapeHtml(lastQ)}"</div>` : ''}
+      <div style="display:flex; gap:6px; margin-top:2px;">
+        <button type="button" class="btn btn-outline btn-xs" data-act="resolved">Aclarado</button>
+        <button type="button" class="btn btn-outline btn-xs" data-act="for_ta">Ayudantía</button>
       </div>
     `;
 
@@ -489,44 +557,82 @@ function renderTopicClusters(clusters = []) {
   });
 }
 
-function renderFeedEntries(entries) {
-  feedList.innerHTML = '';
-  entries.forEach(entry => {
-    const item = document.createElement('div');
-    item.className = 'feed-item';
-    item.id = `entry-${entry.id}`;
+function buildFeedItemElement(entry) {
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.id = `t-entry-${entry.id}`;
+  updateFeedItemElement(item, entry);
+  return item;
+}
 
-    let tagClass = 'tag-concept';
-    let tagText = 'Concepto';
-    if (entry.category === 'formula') { tagClass = 'tag-formula'; tagText = 'Fórmula'; }
-    else if (entry.category === 'importancia') { tagClass = 'tag-emphasis'; tagText = 'Énfasis Control'; }
-    else if (entry.category === 'digresion') { tagClass = 'tag-digression'; tagText = 'Digresión'; }
+function updateFeedItemElement(item, entry) {
+  let tagClass = 'tag-concept';
+  let tagText = 'Concepto';
+  if (entry.category === 'formula') { tagClass = 'tag-formula'; tagText = 'Fórmula'; }
+  else if (entry.category === 'importancia') { tagClass = 'tag-emphasis'; tagText = 'Ojo Control'; }
+  else if (entry.category === 'ejemplo') { tagClass = 'tag-example'; tagText = 'Ejemplo'; }
 
-    const slideBadge = entry.slideRef
-      ? `<span class="tag-badge tag-slide">Lám. ${entry.slideRef.number}</span>`
-      : '';
+  const slideBadge = entry.slideRef ? `<span class="tag-badge tag-slide">Lám. ${entry.slideRef.number}</span>` : '';
 
-    item.innerHTML = `
-      <div class="feed-meta">
-        <div>
-          <span class="feed-time">[${entry.timestamp}]</span>
-          <span style="color: var(--text-muted); font-size: 0.72rem; margin-left: 4px;">${entry.speaker}</span>
-        </div>
-        <div style="display:flex; gap:4px; align-items:center;">
-          ${slideBadge}
-          <span class="tag-badge ${tagClass}">${tagText}</span>
-        </div>
+  item.innerHTML = `
+    <div class="feed-meta">
+      <div>
+        <span class="feed-time">[${escapeHtml(entry.timestamp)}]</span>
+        <span style="color:var(--text-muted); margin-left:5px;">${escapeHtml(entry.speaker)}</span>
       </div>
-      <div class="feed-text" style="font-size: 0.85rem;">${entry.text}</div>
-    `;
-    feedList.appendChild(item);
-  });
-  feedList.scrollTop = feedList.scrollHeight;
+      <div style="display:flex; gap:4px; align-items:center;">
+        ${slideBadge}
+        <span class="tag-badge ${tagClass}">${tagText}</span>
+      </div>
+    </div>
+    <div style="font-size:13px; line-height:1.5;">${escapeHtml(entry.text)}</div>
+  `;
+}
 
-  if (window.renderMathInElement) {
-    window.renderMathInElement(feedList, {
-      delimiters: [{ left: '$', right: '$', display: false }]
-    });
+function renderFeedEntries(entries) {
+  const sig = entries.map(e => `${e.id}:${e.text.length}:${e.category}:${e.slideRef?.id || ''}`).join('|');
+  if (sig === renderedFeedSignature) return;
+  renderedFeedSignature = sig;
+
+  const isNearBottom = (feedList.scrollHeight - feedList.scrollTop - feedList.clientHeight) < 90;
+
+  if (entries.length === 0) {
+    feedList.querySelectorAll('.feed-item').forEach(el => el.remove());
+    renderedEntryCache.clear();
+    feedEmptyState.style.display = 'block';
+    return;
+  }
+
+  feedEmptyState.style.display = 'none';
+  const desiredIds = new Set(entries.map(e => e.id));
+  feedList.querySelectorAll('.feed-item').forEach(el => {
+    const id = el.id.replace('t-entry-', '');
+    if (!desiredIds.has(id)) {
+      el.remove();
+      renderedEntryCache.delete(id);
+    }
+  });
+
+  let addedNew = false;
+  entries.forEach(entry => {
+    const entryHash = `${entry.text}|${entry.category}|${entry.slideRef?.id || ''}`;
+    let el = document.getElementById(`t-entry-${entry.id}`);
+    if (!el) {
+      el = buildFeedItemElement(entry);
+      feedList.appendChild(el);
+      renderedEntryCache.set(entry.id, entryHash);
+      addedNew = true;
+    } else if (renderedEntryCache.get(entry.id) !== entryHash) {
+      updateFeedItemElement(el, entry);
+      renderedEntryCache.set(entry.id, entryHash);
+    }
+  });
+
+  if (addedNew && window.renderMathInElement) {
+    window.renderMathInElement(feedList, { delimiters: [{ left: '$', right: '$', display: false }], throwOnError: false });
+  }
+  if (addedNew && isNearBottom) {
+    feedList.scrollTop = feedList.scrollHeight;
   }
 }
 
@@ -537,41 +643,40 @@ function renderCapsuleModal(capsule) {
     const qa = capsule.qaLog || { totalValid: 0, inClassQuestions: [], postClassQuestions: [] };
     const longi = capsule.longitudinalInsights;
 
-    const escapeAndBold = (str = '') => String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    const boldSafe = (str = '') => escapeHtml(str).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
 
     let insHtml = `
       <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-        <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-left:3px solid #10B981; border-radius:var(--radius-sm); padding:10px 12px;">
-          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Consultas Durante la Clase</div>
-          <div class="tabular-nums" style="font-size:1.35rem; font-weight:800; color:#6EE7B7;">${qa.inClassQuestions.length} ${qa.inClassQuestions.length === 1 ? 'duda' : 'dudas'}</div>
-          <div style="font-size:0.72rem; color:var(--text-muted);">Guardadas anónimamente con su respuesta</div>
+        <div style="background: var(--surface-2); border-left:3px solid var(--success); border-radius:6px; padding:10px 12px;">
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Consultas Durante la Clase</div>
+          <div class="tabular-nums" style="font-size:20px; font-weight:800; color:#6EE7B7;">${qa.inClassQuestions.length} ${qa.inClassQuestions.length === 1 ? 'duda' : 'dudas'}</div>
+          <div style="font-size:12px; color:var(--text-muted);">Guardadas anónimamente</div>
         </div>
-        <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-left:3px solid #8B5CF6; border-radius:var(--radius-sm); padding:10px 12px;">
-          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Estudio Post-Clase (Full IA)</div>
-          <div class="tabular-nums" style="font-size:1.35rem; font-weight:800; color:#DDD6FE;">${qa.postClassQuestions.length} ${qa.postClassQuestions.length === 1 ? 'consulta' : 'consultas'}</div>
-          <div style="font-size:0.72rem; color:var(--text-muted);">Preguntas profundas tras cerrar la sesión</div>
+        <div style="background: var(--surface-2); border-left:3px solid var(--purple); border-radius:6px; padding:10px 12px;">
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Estudio Post-Clase (Full IA)</div>
+          <div class="tabular-nums" style="font-size:20px; font-weight:800; color:#DDD6FE;">${qa.postClassQuestions.length} ${qa.postClassQuestions.length === 1 ? 'consulta' : 'consultas'}</div>
+          <div style="font-size:12px; color:var(--text-muted);">Tras cerrar la sesión</div>
         </div>
       </div>
     `;
 
     insHtml += `
-      <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px 12px;">
-        <strong style="color:#93C5FD;">💬 Preguntas y Respuestas Recopiladas (En Vivo vs. Post-Clase)</strong>
+      <div style="background: var(--surface-2); border-radius:6px; padding:10px 12px;">
+        <strong style="color:#93C5FD;">Preguntas y Respuestas Recopiladas</strong>
         ${qa.totalValid === 0
-          ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Aún no hay preguntas académicas registradas en esta sesión.</div>`
+          ? `<div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Aún no hay preguntas académicas registradas hoy.</div>`
           : `<div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
-              ${[...qa.postClassQuestions.map(q => ({ ...q, badge: '🟣 Post-Clase Full IA', bCol: '#DDD6FE' })), ...qa.inClassQuestions.map(q => ({ ...q, badge: q.chatMode === 'full_ia' ? '🟣 En Vivo (Full IA)' : '🟢 En Vivo', bCol: q.chatMode === 'full_ia' ? '#DDD6FE' : '#6EE7B7' }))].map(q => `
-                <div style="background:var(--bg); border:1px solid var(--border-subtle); border-radius:6px; padding:8px 10px;">
-                  <div style="display:flex; justify-content:space-between; font-size:0.7rem; margin-bottom:3px;">
-                    <span style="color:${q.bCol}; font-weight:700;">${q.badge} · ${escapeAndBold(q.topicLabel)}</span>
-                    <span class="tabular-nums" style="color:var(--text-muted);">[${q.timestamp}] ${q.fromCache ? '⚡ Caché seguro' : '🤖 LLM'}</span>
+              ${[
+                ...qa.postClassQuestions.map(q => ({ ...q, badge: 'Post-Clase Full IA', bCol: '#DDD6FE' })),
+                ...qa.inClassQuestions.map(q => ({ ...q, badge: q.chatMode === 'full_ia' ? 'En Vivo (Full IA)' : 'En Vivo', bCol: q.chatMode === 'full_ia' ? '#DDD6FE' : '#6EE7B7' }))
+              ].map(q => `
+                <div style="background:var(--bg); border-radius:6px; padding:8px 10px;">
+                  <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px;">
+                    <span style="color:${q.bCol}; font-weight:700;">${q.badge} · ${escapeHtml(q.topicLabel)}</span>
+                    <span class="tabular-nums" style="color:var(--text-muted);">[${escapeHtml(q.timestamp)}]</span>
                   </div>
-                  <div style="font-weight:600; color:#F8FAFC; font-size:0.8rem;">P: "${escapeAndBold(q.question)}"</div>
-                  <div style="color:var(--text-muted); font-size:0.77rem; margin-top:3px;">R: ${q.answerSummary ? escapeAndBold(q.answerSummary) : '(Modo Pizarra — enviada al Radar)'}</div>
+                  <div style="font-weight:600; color:var(--text); font-size:13px;">P: "${escapeHtml(q.question)}"</div>
+                  <div style="color:var(--text-muted); font-size:12px; margin-top:3px;">R: ${q.answerSummary ? boldSafe(q.answerSummary) : '(Modo Pizarra — enviada al Radar)'}</div>
                 </div>
               `).join('')}
             </div>`
@@ -579,24 +684,21 @@ function renderCapsuleModal(capsule) {
       </div>
     `;
 
-    if (longi && longi.topBottlenecks) {
+    if (longi?.topBottlenecks) {
       insHtml += `
-        <div style="background: rgba(59, 130, 246, 0.08); border:1px solid rgba(59, 130, 246, 0.28); border-radius:var(--radius-sm); padding:10px 12px;">
+        <div style="background: rgba(59, 130, 246, 0.08); border-radius:6px; padding:10px 12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
-            <strong style="color:#93C5FD;">📊 Comparativa Longitudinal Inter-Semestral (Solo Posibilidad Opcional)</strong>
-            <span style="font-size:0.68rem; color:var(--text-muted);">Base: ${(longi.semestersAnalyzed || []).join(' + ')}</span>
+            <strong style="color:#93C5FD;">Comparativa Longitudinal Inter-Semestral (Opcional)</strong>
+            <span style="font-size:11px; color:var(--text-muted);">Base: ${(longi.semestersAnalyzed || []).map(escapeHtml).join(' + ')}</span>
           </div>
-          <p style="font-size:0.75rem; color:var(--text-muted); margin:4px 0 8px 0;">
-            Herramienta opcional para el docente: muestra qué suele costar más según semestres pasados y qué ajustes didácticos bajaron las dudas.
-          </p>
-          <div style="display:flex; flex-direction:column; gap:6px;">
+          <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
             ${longi.topBottlenecks.map(b => `
-              <div style="background:var(--surface); border:1px solid var(--border-subtle); border-radius:6px; padding:8px 10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; font-weight:700;">
-                  <span>${b.topic}</span>
-                  <span class="tabular-nums" style="color:#FCD34D; font-size:0.72rem;">En vivo: ${b.inClassPct}% • Post-clase: ${b.postClassPct}%</span>
+              <div style="background:var(--surface); border-radius:6px; padding:8px 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700;">
+                  <span>${escapeHtml(b.topic)}</span>
+                  <span class="tabular-nums" style="color:#FCD34D; font-size:12px;">En vivo: ${b.inClassPct}% · Post: ${b.postClassPct}%</span>
                 </div>
-                <div style="font-size:0.76rem; color:#CBD5E1; margin-top:3px;">💡 <strong>Evidencia didáctica:</strong> ${b.strategyTested}</div>
+                <div style="font-size:12px; color:#CBD5E1; margin-top:3px;">${escapeHtml(b.strategyTested)}</div>
               </div>
             `).join('')}
           </div>
@@ -609,33 +711,32 @@ function renderCapsuleModal(capsule) {
   }
 
   if (activeCapsuleTab === 'pauta') {
-    if (!capsule.taFocusPoints || capsule.taFocusPoints.length === 0) {
-      capsuleBody.innerHTML = `<div style="color:var(--text-muted);">No hay puntos ciegos ni dudas acumuladas aún para la pauta de ayudantía.</div>`;
+    if (!capsule.taFocusPoints?.length) {
+      capsuleBody.innerHTML = `<div style="color:var(--text-muted);">No hay puntos de refuerzo acumulados aún.</div>`;
       return;
     }
-    html = capsule.taFocusPoints.map((tp, idx) => `
-      <div style="background: var(--surface-2); border: 1px solid var(--border-subtle); border-left: 3px solid var(--purple); border-radius: var(--radius-sm); padding: 10px 12px;">
+    capsuleBody.innerHTML = capsule.taFocusPoints.map((tp, idx) => `
+      <div style="background: var(--surface-2); border-left: 3px solid var(--purple); border-radius: 6px; padding: 10px 12px;">
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-          <strong style="color:#DDD6FE;">${idx + 1}. ${tp.topic}</strong>
-          <span class="tabular-nums" style="font-size:0.74rem; color:#FCD34D;">${tp.totalSignals} señales • ${tp.lostCount} "Me perdí"</span>
+          <strong style="color:#DDD6FE;">${idx + 1}. ${escapeHtml(tp.topic)}</strong>
+          <span class="tabular-nums" style="font-size:12px; color:#FCD34D;">${tp.totalSignals} señales · ${tp.lostCount} "Me perdí"</span>
         </div>
-        <div style="font-size:0.76rem; color:#6EE7B7; margin-top:3px;">
-          Estado en clase: ${tp.status === 'auto_resolved' ? `✓ Retomado oralmente por el profesor [${tp.resolvedAt || ''}]` : tp.status === 'resolved' ? '✓ Aclarado en pizarra' : tp.status === 'for_ta' ? '📌 Priorizado para Ayudantía' : 'Pendiente para reforzar'}
+        <div style="font-size:12px; color:#6EE7B7; margin-top:3px;">
+          Estado: ${tp.status === 'auto_resolved' ? `Retomado oralmente [${escapeHtml(tp.resolvedAt || '')}]` : tp.status === 'resolved' ? 'Aclarado en pizarra' : tp.status === 'for_ta' ? 'Priorizado para Ayudantía' : 'Pendiente'}
         </div>
-        <div style="font-size:0.8rem; color:var(--text); margin-top:4px;"><strong>Sugerencia Auxiliar:</strong> ${tp.suggestion}</div>
-        ${tp.sampleQuestions && tp.sampleQuestions.length > 0 ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:5px;"><strong>Dudas anónimas de alumnos:</strong><ul style="margin:3px 0 0 18px;">${tp.sampleQuestions.map(q => `<li>"${q}"</li>`).join('')}</ul></div>` : ''}
+        <div style="font-size:13px; margin-top:4px;"><strong>Sugerencia:</strong> ${escapeHtml(tp.suggestion)}</div>
+        ${tp.sampleQuestions?.length ? `<ul style="margin:4px 0 0 18px; font-size:12px; color:var(--text-muted);">${tp.sampleQuestions.map(q => `<li>"${escapeHtml(q)}"</li>`).join('')}</ul>` : ''}
       </div>
     `).join('');
-    capsuleBody.innerHTML = html;
     return;
   }
 
-  if (capsule.teacherEmphasis && capsule.teacherEmphasis.length > 0) {
+  if (capsule.teacherEmphasis?.length) {
     html += `
-      <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-sm); padding: 10px 12px;">
-        <strong style="color:#FCD34D;">📌 Avisos y Énfasis del Profesor ("Ojo para el Control")</strong>
-        <ul style="margin: 6px 0 0 18px; color:#F1F5F9;">
-          ${capsule.teacherEmphasis.map(e => `<li><span class="feed-time">[${e.timestamp}]</span> ${e.text}</li>`).join('')}
+      <div style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid var(--warning); border-radius: 6px; padding: 10px 12px;">
+        <strong style="color:#FCD34D;">Avisos y Énfasis ("Ojo para el Control")</strong>
+        <ul style="margin: 6px 0 0 18px;">
+          ${capsule.teacherEmphasis.map(e => `<li><span class="feed-time">[${escapeHtml(e.timestamp)}]</span> ${escapeHtml(e.text)}</li>`).join('')}
         </ul>
       </div>
     `;
@@ -644,36 +745,24 @@ function renderCapsuleModal(capsule) {
   (capsule.slideBlocks || []).forEach(sb => {
     if (sb.spokenEntries.length === 0 && capsule.totalEntries > 0) return;
     html += `
-      <div style="background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
-        <div style="font-weight:700; color:#DDD6FE; margin-bottom:4px;">📑 Lámina ${sb.slideNumber}: ${sb.title}</div>
-        <div style="font-size:0.78rem; color:var(--text-muted); margin-bottom:6px; border-left:2px solid var(--border-default); padding-left:8px;">
-          ${sb.bulletPoints.map(bp => `• ${bp}`).join('<br>')}
+      <div style="background: var(--surface-2); border-radius: 6px; padding: 10px 12px;">
+        <div style="font-weight:700; color:#DDD6FE; margin-bottom:4px;">Lámina ${sb.slideNumber}: ${escapeHtml(sb.title)}</div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px; border-left:2px solid var(--border-default); padding-left:8px;">
+          ${(sb.bulletPoints || []).map(bp => `• ${escapeHtml(bp)}`).join('<br>')}
         </div>
-        ${sb.spokenEntries.length > 0
-          ? `<div style="font-size:0.82rem;"><strong>Explicación oral en sala:</strong><ul style="margin:4px 0 0 18px;">${sb.spokenEntries.map(se => `<li><span class="feed-time">[${se.timestamp}]</span> ${se.text}</li>`).join('')}</ul></div>`
-          : `<div style="font-size:0.76rem; color:var(--text-dim);">Aún sin intervenciones asociadas a esta lámina.</div>`
-        }
+        ${sb.spokenEntries.length
+          ? `<ul style="margin:4px 0 0 18px; font-size:13px;">${sb.spokenEntries.map(se => `<li><span class="feed-time">[${escapeHtml(se.timestamp)}]</span> ${escapeHtml(se.text)}</li>`).join('')}</ul>`
+          : `<div style="font-size:12px; color:var(--text-dim);">Aún sin intervenciones asociadas.</div>`}
       </div>
     `;
   });
 
-  if (capsule.unmappedEntries && capsule.unmappedEntries.length > 0) {
+  if (capsule.unmappedEntries?.length) {
     html += `
-      <div style="background: var(--surface-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 10px 12px;">
-        <strong style="color:#93C5FD;">📝 Explicaciones de Pizarra Libre (Sin Slide)</strong>
+      <div style="background: var(--surface-2); border-radius: 6px; padding: 10px 12px;">
+        <strong style="color:#93C5FD;">Explicaciones de Pizarra Libre</strong>
         <ul style="margin: 6px 0 0 18px;">
-          ${capsule.unmappedEntries.map(ue => `<li><span class="feed-time">[${ue.timestamp}]</span> ${ue.text}</li>`).join('')}
-        </ul>
-      </div>
-    `;
-  }
-
-  if (capsule.taFocusPoints && capsule.taFocusPoints.length > 0) {
-    html += `
-      <div style="background: rgba(139, 92, 246, 0.1); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: var(--radius-sm); padding: 10px 12px;">
-        <strong style="color:#C4B5FD;">📋 Puntos de Refuerzo para Auxiliar (Ayudantía)</strong>
-        <ul style="margin: 6px 0 0 18px;">
-          ${capsule.taFocusPoints.map(tp => `<li><strong>${tp.topic}</strong> (${tp.totalSignals} señales): ${tp.suggestion}</li>`).join('')}
+          ${capsule.unmappedEntries.map(ue => `<li><span class="feed-time">[${escapeHtml(ue.timestamp)}]</span> ${escapeHtml(ue.text)}</li>`).join('')}
         </ul>
       </div>
     `;
@@ -694,146 +783,24 @@ function downloadMarkdownFile(filename, textContent) {
   URL.revokeObjectURL(url);
 }
 
-// --------------------------------------------------------------------------
-// GRABACIÓN DE AUDIO: MICRÓFONO PRESENCIAL vs AUDIO DE PESTAÑA VIRTUAL (ZOOM/MEET)
-// --------------------------------------------------------------------------
-
-async function startRecording() {
-  try {
-    micStatusText.textContent = '⏳ Activando fuente de audio...';
-    micStatusText.style.color = '#FCD34D';
-
-    if (audioSourceMode === 'virtual') {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true
-      });
-      const audioTracks = displayStream.getAudioTracks();
-      if (audioTracks.length === 0) {
-        displayStream.getTracks().forEach(t => t.stop());
-        throw new Error('No seleccionaste "Compartir audio de la pestaña/sistema" al elegir la ventana de Zoom/Meet.');
-      }
-      // Detener video si no lo necesitamos, conservando la pista de audio limpio sin ruido ambiente
-      displayStream.getVideoTracks().forEach(t => t.stop());
-      mediaStream = new MediaStream(audioTracks);
-    } else {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      });
-    }
-
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass();
-    if (audioContext.state === 'suspended') {
-      await audioContext.resume();
-    }
-    const sourceNode = audioContext.createMediaStreamSource(mediaStream);
-    analyserNode = audioContext.createAnalyser();
-    analyserNode.fftSize = 256;
-    sourceNode.connect(analyserNode);
-
-    isRecording = true;
-    btnToggleMic.classList.add('recording');
-    micIcon.textContent = '⏹';
-    micStatusText.textContent = audioSourceMode === 'virtual'
-      ? '🔴 Capturando audio limpio de Clase Virtual...'
-      : '🔴 ¡Habla ahora! Transmitiendo en vivo...';
-    micStatusText.style.color = '#EF4444';
-
-    startVuMeter();
-
-    timerInterval = setInterval(() => {
-      lectureSeconds++;
-      const m = Math.floor(lectureSeconds / 60);
-      const s = Math.floor(lectureSeconds % 60);
-      micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }, 1000);
-
-    // Iniciar primer bloque de inmediato (0s) y rotar cada 5.0s sin ningún hueco ni descarte
-    startSingleRecorderChunk();
-    chunkCycleInterval = setInterval(() => {
-      if (!isRecording || !mediaStream) return;
-      if (activeRecorder && activeRecorder.state === 'recording') {
-        try { activeRecorder.stop(); } catch (_) {}
-      }
-      startSingleRecorderChunk();
-    }, 5000);
-
-  } catch (err) {
-    micStatusText.textContent = 'Micrófono en espera';
-    micStatusText.style.color = '#94A3B8';
-    alert('No se pudo activar el audio: ' + err.message);
-  }
-}
-
-function stopRecording() {
-  isRecording = false;
-  btnToggleMic.classList.remove('recording');
-  micIcon.textContent = '🎙️';
-  micStatusText.textContent = audioSourceMode === 'virtual'
-    ? 'Audio virtual en espera'
-    : 'Micrófono en espera';
-  micStatusText.style.color = '#94A3B8';
-
-  if (chunkCycleInterval) {
-    clearInterval(chunkCycleInterval);
-    chunkCycleInterval = null;
-  }
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
-  if (vuAnimationId) {
-    cancelAnimationFrame(vuAnimationId);
-    vuAnimationId = null;
-  }
-
-  if (activeRecorder && activeRecorder.state === 'recording') {
-    const recToFinish = activeRecorder;
-    activeRecorder = null;
-    recToFinish.addEventListener('stop', () => {
-      if (mediaStream) {
-        mediaStream.getTracks().forEach(t => t.stop());
-        mediaStream = null;
-      }
-    }, { once: true });
-    try { recToFinish.stop(); } catch (_) {}
-  } else {
-    activeRecorder = null;
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(t => t.stop());
-      mediaStream = null;
-    }
-  }
-  if (audioContext && audioContext.state !== 'closed') {
-    audioContext.close();
-  }
-  vuBar.style.width = '0%';
-}
+// ==========================================================================
+// CAPTURA DE AUDIO CON OVERLAP ACÚSTICO DE 1.0s (CERO PALABRAS CORTADAS)
+// ==========================================================================
 
 function getBestAudioMimeType() {
-  const types = [
-    'audio/webm;codecs=opus',
-    'audio/webm',
-    'audio/mp4',
-    'audio/ogg;codecs=opus'
-  ];
+  const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
   for (const t of types) {
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
   }
   return '';
 }
 
-function startSingleRecorderChunk() {
-  if (!isRecording || !mediaStream) return;
+function launchOverlappingRecorder() {
+  if (!isRecording || isPausedRecording || !mediaStream) return null;
 
   const mime = getBestAudioMimeType();
   const rec = mime ? new MediaRecorder(mediaStream, { mimeType: mime }) : new MediaRecorder(mediaStream);
-  activeRecorder = rec;
+  activeRecorders.add(rec);
 
   const chunks = [];
   const chunkStartSecond = lectureSeconds;
@@ -843,6 +810,7 @@ function startSingleRecorderChunk() {
   };
 
   rec.onstop = () => {
+    activeRecorders.delete(rec);
     if (chunks.length === 0) return;
     const blob = new Blob(chunks, { type: mime || 'audio/webm' });
     if (blob.size < 500) return;
@@ -853,6 +821,118 @@ function startSingleRecorderChunk() {
   };
 
   rec.start(250);
+  return rec;
+}
+
+async function startRecording() {
+  try {
+    micStatusText.textContent = 'Activando fuente de audio...';
+    micStatusText.style.color = '#FCD34D';
+
+    if (audioSourceMode === 'virtual') {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const audioTracks = displayStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        displayStream.getTracks().forEach(t => t.stop());
+        throw new Error('Debes marcar "Compartir audio de la pestaña" en Zoom/Meet.');
+      }
+      displayStream.getVideoTracks().forEach(t => t.stop());
+      mediaStream = new MediaStream(audioTracks);
+    } else {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+    }
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    audioContext = new AudioCtx();
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    const sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    analyserNode = audioContext.createAnalyser();
+    analyserNode.fftSize = 256;
+    sourceNode.connect(analyserNode);
+
+    isRecording = true;
+    isPausedRecording = false;
+    heroControlsIdle.style.display = 'none';
+    heroControlsLive.style.display = 'grid';
+    btnEndClassIdle.style.display = 'none';
+    micStatusText.textContent = audioSourceMode === 'virtual' ? 'En vivo (Zoom/Meet)' : 'En vivo (Micrófono Sala)';
+    micStatusText.style.color = '#6EE7B7';
+
+    startVuMeter();
+    timerInterval = setInterval(() => {
+      if (isPausedRecording) return;
+      lectureSeconds += 1;
+      const m = Math.floor(lectureSeconds / 60);
+      const s = Math.floor(lectureSeconds % 60);
+      micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }, 1000);
+
+    // Rotación cada 5.0s manteniendo 1.0s de overlap con el grabador previo
+    let currentRec = launchOverlappingRecorder();
+    chunkCycleInterval = setInterval(() => {
+      if (!isRecording || isPausedRecording || !mediaStream) return;
+      const finishingRec = currentRec;
+      currentRec = launchOverlappingRecorder();
+      if (finishingRec && finishingRec.state === 'recording') {
+        setTimeout(() => {
+          if (finishingRec.state === 'recording') {
+            try { finishingRec.stop(); } catch (_) {}
+          }
+        }, 1000);
+      }
+    }, 5000);
+  } catch (err) {
+    micStatusText.textContent = 'En espera para iniciar';
+    micStatusText.style.color = 'var(--text-muted)';
+    showToast('No se pudo iniciar audio: ' + err.message, 'warn');
+  }
+}
+
+function togglePauseRecording() {
+  if (!isRecording) return;
+  isPausedRecording = !isPausedRecording;
+  if (isPausedRecording) {
+    for (const rec of activeRecorders) {
+      if (rec.state === 'recording') try { rec.stop(); } catch (_) {}
+    }
+    btnPauseMic.innerHTML = `${icon('play', 16)}<span>Reanudar</span>`;
+    micStatusText.textContent = 'Captura en pausa';
+    micStatusText.style.color = '#FCD34D';
+  } else {
+    launchOverlappingRecorder();
+    btnPauseMic.innerHTML = `${icon('pause', 16)}<span>Pausar Audio</span>`;
+    micStatusText.textContent = audioSourceMode === 'virtual' ? 'En vivo (Zoom/Meet)' : 'En vivo (Micrófono Sala)';
+    micStatusText.style.color = '#6EE7B7';
+  }
+}
+
+function stopRecording() {
+  isRecording = false;
+  isPausedRecording = false;
+  heroControlsIdle.style.display = 'flex';
+  heroControlsLive.style.display = 'none';
+  btnEndClassIdle.style.display = 'inline-flex';
+  micStatusText.textContent = 'Clase detenida';
+  micStatusText.style.color = 'var(--text-muted)';
+
+  if (chunkCycleInterval) { clearInterval(chunkCycleInterval); chunkCycleInterval = null; }
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  if (vuAnimationId) { cancelAnimationFrame(vuAnimationId); vuAnimationId = null; }
+
+  for (const rec of activeRecorders) {
+    if (rec.state === 'recording') try { rec.stop(); } catch (_) {}
+  }
+  setTimeout(() => {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(t => t.stop());
+      mediaStream = null;
+    }
+  }, 300);
+
+  if (audioContext && audioContext.state !== 'closed') audioContext.close();
+  vuBar.style.width = '0%';
 }
 
 async function sendChunkToServer(audioBlob, currentSeconds) {
@@ -862,61 +942,45 @@ async function sendChunkToServer(audioBlob, currentSeconds) {
   formData.append('isPrimarySpeaker', 'true');
 
   try {
-    const res = await fetch('/api/live/audio-chunk', {
-      method: 'POST',
-      body: formData
-    });
+    const res = await fetch('/api/live/audio-chunk', { method: 'POST', body: formData });
     if (res.ok) {
       const data = await res.json();
-      if (data.entry) {
-        fetchState();
-      }
+      if (data.entry) fetchState();
     }
   } catch (err) {
-    console.warn('Error enviando chunk de audio:', err);
+    console.warn('Error enviando chunk:', err);
   }
 }
 
 function startVuMeter() {
   const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
-
   function update() {
     if (!isRecording) return;
-    analyserNode.getByteFrequencyData(dataArray);
-
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      sum += dataArray[i];
+    if (!isPausedRecording) {
+      analyserNode.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      const avg = sum / dataArray.length;
+      vuBar.style.width = `${Math.min(100, Math.round((avg / 128) * 100))}%`;
     }
-    const avg = sum / dataArray.length;
-    const pct = Math.min(100, Math.round((avg / 128) * 100));
-    vuBar.style.width = pct + '%';
-
     vuAnimationId = requestAnimationFrame(update);
   }
   update();
 }
 
-// --------------------------------------------------------------------------
-// MODO SIMULACIÓN AUTOMÁTICA
-// --------------------------------------------------------------------------
-
 function toggleSimulatedLecture() {
-  if (isSimulating) {
-    stopSimulation();
-  } else {
-    startSimulation();
-  }
+  if (isSimulating) stopSimulation();
+  else startSimulation();
 }
 
 function startSimulation() {
   isSimulating = true;
-  btnSimulateOneMin.textContent = '⏹ Detener Demo';
+  btnSimulateOneMin.innerHTML = `${icon('stop', 13)}<span>Detener Demo</span>`;
   btnSimulateOneMin.classList.add('btn-danger');
-  micStatusText.textContent = '⚡ Simulación de clase activa...';
+  micStatusText.textContent = 'Simulación de audio activa';
   micStatusText.style.color = '#38BDF8';
 
-  let simSec = 0;
+  let simSec = lectureSeconds;
   async function step() {
     if (!isSimulating) return;
     try {
@@ -927,16 +991,13 @@ function startSimulation() {
       });
       const data = await res.json();
       simSec = data.nextSeconds || (simSec + 7);
+      lectureSeconds = simSec;
       const m = Math.floor(simSec / 60);
       const s = Math.floor(simSec % 60);
       micTimerDisplay.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       fetchState();
-      if (simSec >= 56) {
-        stopSimulation();
-      }
-    } catch (e) {
-      console.warn('Error en simulación:', e);
-    }
+      if (simSec >= 56) stopSimulation();
+    } catch (_) {}
   }
 
   step();
@@ -945,10 +1006,10 @@ function startSimulation() {
 
 function stopSimulation() {
   isSimulating = false;
-  btnSimulateOneMin.textContent = '⚡ Simular Demo';
+  btnSimulateOneMin.innerHTML = `${icon('play', 13)}<span>Simular Demo</span>`;
   btnSimulateOneMin.classList.remove('btn-danger');
-  micStatusText.textContent = 'Micrófono en espera';
-  micStatusText.style.color = '#94A3B8';
+  micStatusText.textContent = 'En espera para iniciar';
+  micStatusText.style.color = 'var(--text-muted)';
   if (simulationInterval) clearInterval(simulationInterval);
 }
 

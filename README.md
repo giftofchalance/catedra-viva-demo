@@ -1,133 +1,90 @@
-# Cátedra Viva V3.1 — Co-Piloto de Aula Aumentada con IA (Presencial y Virtual)
+# Cátedra Viva — V4 (Clean-Core)
 
-Prototipo funcional end-to-end para cátedras universitarias en tiempo real (clases presenciales y virtuales por Zoom/Meet). Diseñado bajo el principio **"Prender y Olvidarse" (Cero fricción para el docente y el alumno)**, fomentando la participación activa en sala, protegiendo la privacidad desde la arquitectura y reduciendo costos mediante GPU institucional + caché seguro sin sesgo epistémico.
-
----
-
-## 🎯 Qué resuelve Cátedra Viva V3.1
-
-1. **No mata la oportunidad de levantar la mano — la impulsa:**
-   - Durante la clase (`🟢 Seguimiento`), el tutor responde en **máximo 2–3 líneas**, cita exactamente lo dicho en sala (`[VIVO-X]`) o en la diapositiva (`[SLIDE-X]`), y genera una caja verde lista con **la pregunta formulada en primera persona para levantar la mano o copiar directo al chat de Zoom/Meet**.
-2. **Control total del profesor sin distracción (3 modos):**
-   - `🟡 Pizarra`: pausa temporalmente respuestas del chat para centrar atención en sala; las dudas se siguen agrupando en el Radar.
-   - `🟢 Seguimiento` *(default en vivo)*: respuestas ultracortas de reenganche + sugerencia de pregunta en voz alta.
-   - `🟣 Full IA`: desbloqueable **en cualquier momento durante la clase** por el profesor y activado **automáticamente en 1 clic** al pulsar `🏁 Terminar Clase` para estudio profundo paso a paso con derivaciones en LaTeX.
-3. **Radar Inteligente + Auto-Resolución Hands-Free:**
-   - Agrupa dudas anónimas repetidas y señales de pulso (`⚡ Me perdí`, `🐢 Muy rápido`, `💡 Pedir ejemplo`) por tópico curricular (`TOPIC_RULES` + coincidencia de slides).
-   - **Zero-touch Hands-Free:** Cuando el profesor vuelve a explicar el tópico oralmente en el micrófono, `autoResolveClustersFromVoice()` marca automáticamente el cluster como resuelto sin obligar al docente a mirar la pantalla.
-4. **U-Cursos Auto-Sync + Degradación Limpia (Pizarra Libre):**
-   - Mapea automáticamente cada segmento oral a las láminas escuetas del curso (`SLIDE-1`..`SLIDE-4`) y construye el **Apunte Vivo Fusionado** (Slide + Voz + Avisos *"Ojo para el Control"* + Pauta del Auxiliar). Si no calza con ninguna lámina, degrada limpiamente a contexto plano sin fricción.
-5. **Soporte Nativo para Clases Virtuales (Zoom / Meet / Teams):**
-   - Captura audio limpio directo de la pestaña/ventana (`getDisplayMedia` sin video, sin eco ambiente), comparte acceso vía enlace + QR local (`/api/qr`) sin cuentas y ofrece pulsos anónimos + botón `📋 Copiar para Zoom`.
-6. **Privacidad Explícita y Tokenomics Anti-Sesgo:**
-   - **Audio Efímero 0s:** Cada fragmento de audio se convierte/transcribe y se destruye del servidor en `<1s` (sin biometría vocal ni grabaciones persistidas).
-   - **Privacidad en 2 Capas:** Estudiantes 100% anónimos (sin login ni correo); docentes y auxiliares solo ven clusters agregados en Capa 2.
-   - **Caché Semántico Seguro:** Con Guardia de Negación y Operadores (`extractLogicalSignature`), Invalidador Temporal por avance de transcripción (`transcriptCount`), `Single-Flight Coalescing` (`IN_FLIGHT_QUERIES`), bypass manual (`🔄 Explicar desde otro ángulo`) y telemetría de **Prefix KV-Cache (92%)** comparando **API Cloud vs. GPUs Dedicadas de Facultad (`vLLM` en 2× RTX 4090 / 1× L40S)**.
-7. **Data & Insights Opcional (Cero Obligación):**
-   - Registra dudas anónimas separando **Durante la Clase (`in_class`)** vs. **Estudio Post-Clase (`post_class`)** más comparativas longitudinales inter-semestrales en la pestaña `📈 Data & Insights (Opcional)` del modal `📘 Apunte Vivo`.
+Asistente pedagógico en tiempo real para salas de clase presenciales e híbridas. Captura la voz del profesor sin fricción, la sincroniza con el material de apoyo, detecta dónde se pierden los estudiantes (*Radar de Dudas*) y responde preguntas en contexto mediante un tutor IA con **Quote-Reply**, memoria conversacional acotada y modos pedagógicos explícitos.
 
 ---
 
-## 🧭 Vistas del Sistema
+## Principios y Modos de Operación (V4)
 
-| Ruta | Rol | Descripción |
-|---|---|---|
-| `/` | Portada | Selector de asignatura activa (`macro`, `probabilidades`, `finanzas`), enlace a roles y acceso a `/simulador`. |
-| `/profesor` | Docente / Auxiliar | Micrófono sala o audio de pestaña Zoom/Meet, `🏁 Terminar Clase`, control de 3 modos (`🟡 Pizarra` / `🟢 Seguimiento` / `🟣 Full IA`), slides auto-sincronizadas, Read.ai (PPM/palabras/perdidos), Radar de dudas, QR SVG local, Privacidad/Tokenomics y Apunte Vivo (`📘` + `📋` + `📈`). |
-| `/estudiante` | Estudiante | Transcripción en vivo con filtros (`Todo`, `📌 Ojo Control`, `🧮 Fórmulas`, `Sin digresiones`), citas clicables, pulsos anónimos (`⚡ Me perdí`, `🐢 Muy rápido`, `💡 Pedir ejemplo`), chat adaptativo 3 modos + caja "Levantar la mano / Copiar para Zoom" + Apunte Vivo. |
-| `/simulador` | Laboratorio Tri-Rol | Vista unificada en 3 columnas (Profe • Radar Auxiliar • Estudiante) con avance de audio real chunk-a-chunk por ramo. |
+1. **Separación real entre clase en vivo y post-clase**
+   - **En Vivo · Seguimiento:** Respuestas breves, directas y ancladas al minuto exacto de clase para no competir con la explicación del profesor ni frenar la participación oral.
+   - **En Vivo · Full IA:** El docente puede habilitar respuestas completas en vivo sin cerrar la clase (`classClosed === false`) y manteniendo activo el Radar de Dudas.
+   - **Post-Clase · Full IA:** Al presionar **Terminar Clase** (`classClosed === true`), se habilita el tutor completo para estudio posterior y se desglosa el historial en dos fases (`inClass` vs `postClass`).
 
----
+2. **Cero exclusión del discurso docente**
+   - Se eliminó por completo la categoría `digresion`. El micro-etiquetado clasifica únicamente en `concepto_clave`, `formula`, `importancia` y `ejemplo`, preservando historias personales, ejemplos cotidianos y analogías que suelen sostener la intuición de la clase.
 
-## 🧠 Arquitectura de Modelos (Separación Estricta en 6 Buckets)
-
-Para evitar que un componente sature la cuota de otro durante ráfagas de aula, `services/aiEngine.js` separa estrictamente cada pipeline:
-
-| Bucket | Rol en el Pipeline | Modelo | Límite Referencial | Fallback |
-|---|---|---|---|---|
-| **1** | Audio STT Primario | `whisper-large-v3` (Groq) | 20 RPM | Rotación automática a Bucket 2 |
-| **2** | Audio STT Respaldo | `whisper-large-v3-turbo` (Groq) | 20 RPM | Rotación a Bucket 6 (`gemini-3.5-flash-lite`) |
-| **3** | Micro-Labeler Semántico | `openai/gpt-oss-20b` (Groq) | 30 RPM exclusivos | `detectHeuristicCategory()` blindada |
-| **4** | Chatbot Tutor Primario | `qwen/qwen3.8-27b` (Groq) | 30 RPM exclusivos | Rotación a Bucket 5 |
-| **5** | Chatbot Tutor Respaldo + Resumen | `openai/gpt-oss-120b` (Groq) | 30 RPM exclusivos | Reintento 429 / Bucket 6 |
-| **6** | Respaldo Externo Multimodal/Texto | `gemini-3.5-flash-lite` (Google) | Failover rápido (~1s) | Mensaje controlado |
-
-> **Nota crítica sobre Whisper y modelos:**
-> - **NO enviar parámetro `prompt` a Whisper** en Groq (`transcribeLiveAudio`): el decodificador acústico tiende a alucinar repitiendo el prompt en pausas. La normalización fonética (`KPM ➔ CAPM`, `ISLM ➔ IS-LM`, `guac ➔ WACC`, `ban ➔ VAN`) se ejecuta en `openai/gpt-oss-20b` + `normalizeSpokenTerms()`.
-> - **NO usar `llama-3.1-8b-instant` ni `gemini-2.5-flash`**: devolvieron `404` en el entorno actual del proyecto.
+3. **Agnosticismo curricular y cero carga extra**
+   - El agrupamiento de temas, el matching de láminas (`matchSlideForSegment`) y la creación dinámica de ramos/materiales (`POST /api/courses/custom`) funcionan sobre cualquier asignatura sin reglas hardcoded.
+   - Vista docente reducida a 2 zonas con 3 tarjetas principales, botón protagonista (`Iniciar Clase` / `Pausar` / `Terminar Clase`), captura acústica escalonada con solapamiento de `1.0s` y sin telemetría técnica de GPU en pantalla principal (accesible en el modal de Privacidad & GPU).
+   - Vista estudiante diseñada mobile-first (`48px` topbar en una fila, navegación inferior de 1 pulgar `En Vivo | Tutor | Me perdí`, botón **Citar** en transcripción y respuestas del tutor, persistencia en `sessionStorage` y citas clicables `[HIST-X]` / `[MAT-X]`).
 
 ---
 
-## 📁 Mapa de Archivos Activos (V3.1)
+## Arquitectura Modular V4
 
-```text
-├── server.js                      # Servidor Express, estado en memoria liveSession, ffmpeg, APIs REST y rutas
-├── services/
-│   └── aiEngine.js                # Whisper STT + filtros alucinación, Micro-Labeler, Tutor 3 modos, Caché Anti-Sesgo, Single-Flight, Cápsula & Insights
-├── data/
-│   └── coursesDb.js               # Cursos (macro IN4123, probabilidades IN3401, finanzas IN5233), slides U-Cursos, RAG histórico y longitudinalInsights
-├── public/
-│   ├── css/app.css                # Sistema visual "Obsidian Graphite" oscuro con viewport-locked desktop y switches custom
-│   ├── index.html                 # Portada y selector de curso
-│   ├── teacher.html & js/teacher.js   # Panel Docente/Auxiliar (Audio mic/Zoom, 3 modos, Radar, Modales QR / Apunte / Privacidad-GPU)
-│   ├── student.html & js/student.js   # Vista Estudiante (Transcripción filtrable, pulsos Zoom, chat adaptativo KaTeX + Levantar la mano)
-│   └── simulator.html             # Laboratorio Tri-Rol en 1 pantalla
-├── Modelo IS-LM - Explicado para principiantes!.mp3  # Audio largo real (5m06s) Macroeconomía
-├── Clase_Calculo_Derivadas.mp3    # Audio real Probabilidades / Cálculo (~1m08s)
-├── Clase_Finanzas_CAPM.mp3        # Audio real Finanzas CAPM/WACC/VAN (~59s)
-├── PRESENTACION_MARTES_V3.md      # Guion completo, trade-offs, valor de datos y resultados de estrés para la presentación
-└── _legacy_v1/                    # Respaldo histórico de la primera versión (no servido por server.js)
-```
+### Backend (`server.js`, `state/`, `routes/`, `data/`, `services/`)
 
----
+- `server.js`: Servidor HTTP/Express en `http://localhost:3000`. Sirve `/`, `/profesor`, `/estudiante`, `/simulador` y monta las rutas modulares.
+- `state/sessionStore.js`: Estado centralizado de sesión en vivo (`liveSession`, `stateVersion`, `classClosed`), hub SSE (`addSseClient`, `bumpStateVersion`), gestión de clusters (`upsertTopicCluster`) y serialización pública (`buildPublicLiveState`).
+- `data/coursesDb.js`: Base de cursos de demostración (`COURSES_DB`), creación de cursos/materiales personalizados (`createCustomCourse`) y matching agnóstico por tokens (`matchSlideForSegment`).
+- `routes/courseRoutes.js`: Consulta de ramos y creación de cursos propios (`POST /api/courses/custom`).
+- `routes/liveRoutes.js`: Ingesta de audio con deduplicación por solapamiento, estado en vivo, stream SSE (`/api/live/stream`) y reinicio limpio (`/api/live/reset`).
+- `routes/chatRoutes.js`: Tutor contextual, Quote-Reply, historial por fase y generación de cápsula.
+- `services/llmClients.js`: Clientes centralizados para Groq Whisper, Groq Chat y Gemini `gemini-3.5-flash-lite` con `AbortSignal.timeout(15000)`.
+- `services/textUtils.js`: Normalización sin tildes, `extractMeaningfulTokens` y `computeJaccard`.
+- `services/stt.js`: `transcribeLiveAudio` (fallback `whisper-large-v3` -> `whisper-large-v3-turbo` -> `gemini-3.5-flash-lite`), filtros anti-alucinación y `mergeOverlappingTranscript` para el solapamiento de `1.0s`.
+- `services/labeler.js`: Micro-etiquetador (`openai/gpt-oss-20b` + heurística) restringido a `concepto_clave`, `formula`, `importancia` y `ejemplo`.
+- `services/radar.js`: `detectTopicCluster`, `autoResolveClustersFromVoice` (guardia mínima de 8 palabras) y `maybeUpdateSmartChapters` (histéresis `>= 50s`, `>= 8` palabras y sin repetición en los últimos 2 capítulos).
+- `services/semanticCache.js`: Caché semántica segura (`IN_FLIGHT_QUERIES`, firma de negaciones/operadores, invalidación temporal y bypass automático `isFollowUpQuestion` ante `quotedContext`, `chatHistory` o preguntas anafóricas).
+- `services/tutor.js`: Pool priorizado (`openai/gpt-oss-120b` -> `qwen/qwen3.8-27b` -> `gemini-3.5-flash-lite`), filtro agnóstico `isLikelyAcademicQuestion`, soft-landing de alcance, soporte de `quotedContext` + últimos 2 turnos de `chatHistory` tras el prefijo estático (Prefix KV-Caching) y guardia anti-respuesta vacía.
+- `services/capsule.js` y `services/aiEngine.js`: Generación de cápsula post-clase con desglose por fase y re-exportación unificada de servicios.
 
-## 🔌 Endpoints REST Principales (`server.js`)
+### Frontend (`public/`)
 
-- `GET /api/courses` y `POST /api/courses/select` — Lista y cambio de asignatura activa (`macro`, `probabilidades`, `finanzas`).
-- `GET /api/live/state` — Estado en vivo completo (transcript, capítulos, clusters ordenados, pulsos, preguntas, tokenomics, Read.ai pace, `teacherSettings`).
-- `POST /api/live/audio-chunk` — Recibe audio multipart desde micrófono o pestaña virtual, normaliza vía `ffmpeg-static` a MP3 mono 16kHz, transcribe, borra temporales (`ephemeralChunksDeleted++`), etiqueta, auto-resuelve Radar y actualiza Smart Chapters.
-- `POST /api/simulator/step-chunk` — Simula ingesta incremental paso a paso sobre los MP3 locales del ramo activo.
-- `POST /api/teacher/settings` — Cambia `chatState` (`paused` | `active` | `full_ia`), `allowComplement`, `hideDigressions`.
-- `POST /api/teacher/cluster-action` — Marca cluster de Radar como `open`, `resolved`, `auto_resolved` o `for_ta`.
-- `POST /api/teacher/close-class` — Cierra clase (`classClosed = true`), genera `lastCapsule`, guarda resumen en `historicalClasses` y activa automáticamente `🟣 Full IA`.
-- `POST /api/chat` — Procesa duda del estudiante con caché seguro + Single-Flight, guarda `qaLog` diferenciando `phase` (`in_class` vs. `post_class`) y alimenta el Radar solo mientras `chatState !== 'full_ia'`.
-- `POST /api/live/forward-question` — Escala manualmente una duda anónima al Radar (`escalatedCount`).
-- `POST /api/live/lost` y `POST /api/live/pulse` — Pulsos anónimos (`lost`, `fast`, `example`).
-- `GET /api/live/capsule` — Retorna Apunte Vivo Fusionado, Pauta del Auxiliar y `qaLog` + `longitudinalInsights`.
-- `POST /api/materials/add` — Agrega material o guía al curso activo.
-- `POST /api/live/reset` — Reinicia sesión viva manteniendo intactos los datos maestros de cursos.
-- `GET /api/qr` — Genera QR SVG local sin dependencias de servicios externos.
+- `public/js/icons.js`: Iconos SVG estilo Lucide uniformes, sanitización (`escapeHtml`, `formatMarkdownSafe`), notificaciones (`showToast`) y sincronización SSE (`connectLiveStateSync`).
+- `public/css/app.css`: Sistema visual Obsidian Graphite, escala tipográfica modular (`11–20px`), radios concéntricos, barra de navegación móvil inferior y compositor con **Quote-Reply**.
+- `public/index.html`: Selector limpio de roles (Profesor, Estudiante, Simulador).
+- `public/student.html` & `public/js/student.js`: Experiencia estudiante en vivo y post-clase, **Citar** mensajes/transcripción, referencias `[HIST-X]`/`[MAT-X]` y actualización incremental del DOM.
+- `public/teacher.html` & `public/js/teacher.js`: Consola docente simplificada con 3 tarjetas principales, control único de inicio/cierre, captura continua solapada y gestión en línea de ramos/láminas.
+- `public/simulator.html`: Simulador interactivo con flujo completo de roles, **Quote-Reply** y citas clicables.
+
+### Archivo Histórico
+
+- `_legacy_v1/archive/`: Contiene los 7 archivos heredados de la V1 retirados del árbol activo durante el refactor V4.
 
 ---
 
-## 🚀 Puesta en Marcha y Despliegue
+## Ejecución y Validación
 
-### Variables de Entorno
-Configura `.env` en local o Environment Variables en Render:
-- `GROQ_API_KEY`: Clave de Groq (requerida para Whisper STT, Micro-Labeler y pool primario del Chatbot).
-- `GEMINI_API_KEY`: Clave de Google AI Studio (respaldo externo Bucket 6).
-- `PORT`: Puerto HTTP (por defecto `3000`).
+### Requisitos y arranque local
 
-### Ejecución Local
 ```bash
 npm install
-npm start
+node server.js
 ```
-Abrir `http://localhost:3000` (o `/profesor`, `/estudiante`, `/simulador`).
 
-### Despliegue en Render
-- **Build Command:** `npm install`
-- **Start Command:** `npm start`
-- **Node Engine:** `>=18.0.0`
-- **Auto-Deploy:** Rama `main` del repositorio `https://github.com/giftofchalance/catedra-viva-demo.git`.
+El servidor expone:
+- Portal de acceso: `http://localhost:3000/`
+- Consola Docente: `http://localhost:3000/profesor`
+- Vista Estudiante: `http://localhost:3000/estudiante`
+- Simulador E2E: `http://localhost:3000/simulador`
 
----
+*(Requiere configurar las llaves de API de Groq/Gemini en `.env` para STT y generación).*
 
-## 🤝 Guía Rápida de Handoff (Para Continuar con Otro Modelo)
+### Resultados Verificados V4
 
-Si necesitas cambiar de modelo en Antigravity por cuota, comparte este contexto esencial:
-1. **Filosofía no negociable:** Toda mejora debe respetar **"cero fricción / cero trabajo extra"** para profesor y estudiante en sala. Ningún dato de diseño o estrategia longitudinal debe presentarse como imposición docente, siempre como posibilidad opcional.
-2. **Privacidad y ética:** El audio **nunca** se persiste (se borra inmediatamente después de transcribir) y el alumno **nunca** tiene cuenta ni tracking individual (solo agregados por tópico en Capa 2).
-3. **Soft-Tagging en Micro-Labeler:** `digresion` solo añade una etiqueta visual opcional (`hideDigressions: false` por defecto); jamás borra frases del contexto RAG ni del Apunte Vivo, evitando pérdida de analogías pedagógicas.
-4. **Verificación de sintaxis:** Tras editar cualquier JS, ejecutar `node --check server.js services/aiEngine.js data/coursesDb.js public/js/teacher.js public/js/student.js` antes de iniciar `node server.js`.
-5. **No contaminar con notas personales antiguas:** No leer archivos históricos antiguos del Vault salvo que Bruno los cite explícitamente; trabajar sobre el código vivo de este repositorio.
+- **Audio real de clase presencial en pizarra (`TLh_6G7i4_w`, 3 min `03:00–06:00`, 35 chunks con solapamiento):**
+  - `35` entradas transcritas (`497` palabras), `88%` de cobertura frente a subtítulos de referencia.
+  - Latencia por chunk: `893 ms` promedio (`1736 ms` máximo).
+  - Segmentación limpia en `2` capítulos (`[00:00] Apertura y Objetivos` y `[00:20] Límite y Continuidad`) y `0` fragmentos descartados como digresión.
+- **Suite automatizada V4 (`eval_v4_report.json`):** `11/11` pruebas aprobadas (`ALL PASSED: true`), incluyendo creación agnóstica del curso `FI2002` (*Electromagnetismo* con matching a `Lámina 2: Ley de Lenz`), `En Vivo · Full IA` con radar activo, precisión conceptual (`TPM Chile` -> desplazamiento de `LM`), **Quote-Reply** con bypass de caché, filtro `off_topic` y cierre a `Post-Clase`.
+- **Verificación visual en navegador (escritorio `1280×800` y móvil `390×844`):** `0` errores de consola, `/profesor` simplificado a 3 tarjetas sin telemetría USD invasiva, `/estudiante` móvil con barra superior de `48px` y **Quote-Reply** funcional.
+
+### Rollback en Git
+
+La versión estable previa quedó etiquetada de forma inmutable antes del refactor V4:
+
+```bash
+git checkout v3.1-stable
+```
