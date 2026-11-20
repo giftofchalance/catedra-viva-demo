@@ -90,7 +90,24 @@ export const COURSES_DB = {
         pages: 'p. 1–4',
         content: 'Efecto desplazamiento (crowding out): un aumento del gasto público desplaza la curva IS hacia la derecha, elevando el ingreso y la tasa de interés. La mayor tasa de interés reduce la inversión privada. Eficacia de la política monetaria según la sensibilidad de la demanda de dinero a la tasa de interés.'
       }
-    ]
+    ],
+    longitudinalInsights: {
+      semestersAnalyzed: ['Otoño 2025', 'Primavera 2025'],
+      topBottlenecks: [
+        {
+          topic: 'Efecto Desplazamiento (Crowding Out) en IS-LM',
+          inClassPct: 38,
+          postClassPct: 44,
+          strategyTested: 'Al mostrar primero el canal causal ΔG ↑ ➔ Y ↑ ➔ Md ↑ ➔ r ↑ ➔ I ↓ en pizarra antes de dibujar la nueva IS, las dudas post-clase bajaron 31% en Primavera 2025.'
+        },
+        {
+          topic: 'Pendiente Curva LM y Trampa de Liquidez',
+          inClassPct: 24,
+          postClassPct: 33,
+          strategyTested: 'Comparar explícitamente el caso extremo horizontal (trampa de liquidez) vs. clásico vertical facilita el análisis de eficacia fiscal/monetaria.'
+        }
+      ]
+    }
   },
 
   probabilidades: {
@@ -178,7 +195,24 @@ export const COURSES_DB = {
         pages: 'p. 1–3',
         content: 'Regla de la multiplicación: P(A inter B) = P(A|B)P(B). Diagnóstico clínico: prevalencia P(E), sensibilidad P(+|E), especificidad P(-|no E). El Teorema de Bayes permite calcular el valor predictivo positivo P(E|+).'
       }
-    ]
+    ],
+    longitudinalInsights: {
+      semestersAnalyzed: ['Otoño 2025', 'Primavera 2025'],
+      topBottlenecks: [
+        {
+          topic: 'Disjuntos vs. Independencia Estocástica',
+          inClassPct: 41,
+          postClassPct: 36,
+          strategyTested: 'Contrastar ambos conceptos con un diagrama de Venn (área nula vs. proporción geométrica) redujo los errores de control C1 en un 28%.'
+        },
+        {
+          topic: 'Construcción de Partición previa al Teorema de Bayes',
+          inClassPct: 32,
+          postClassPct: 49,
+          strategyTested: 'Exigir dibujar el árbol completo con frecuencias naturales de 1.000 personas antes de usar la fórmula cerrada de Bayes.'
+        }
+      ]
+    }
   },
 
   finanzas: {
@@ -266,7 +300,24 @@ export const COURSES_DB = {
         pages: 'p. 1–15',
         content: 'Modelo CAPM: el retorno exigido de un activo depende de la tasa libre de riesgo (Rf), su beta y la prima por riesgo de mercado (E(Rm) - Rf). La beta mide únicamente el riesgo sistemático; el riesgo idiosincrático se reduce mediante diversificación al combinar activos con correlación menor que 1. Valorización de empresas: el WACC descuenta flujos de caja libres de la firma. Criterio de inversión: una TIR alta no garantiza mayor creación de valor; para eso se evalúa el VAN. No confundir retorno esperado (estimación estadística) con retorno exigido (compensación mínima por riesgo sistemático según CAPM).'
       }
-    ]
+    ],
+    longitudinalInsights: {
+      semestersAnalyzed: ['Otoño 2025', 'Primavera 2025'],
+      topBottlenecks: [
+        {
+          topic: 'Criterios VAN vs. TIR (Escala y Reinversión)',
+          inClassPct: 29,
+          postClassPct: 46,
+          strategyTested: 'Presentar el contraejemplo numérico (proyecto chico de TIR 80% vs. proyecto grande de TIR 22% y VAN mayor) antes de pasar a WACC eliminó la confusión en Primavera 2025.'
+        },
+        {
+          topic: 'Retorno Esperado E(R) vs. Retorno Exigido CAPM',
+          inClassPct: 35,
+          postClassPct: 42,
+          strategyTested: 'Anotar explícitamente una tabla comparativa entre alfa de Jensen (desequilibrio) y la recta SML en equilibrio.'
+        }
+      ]
+    }
   }
 };
 

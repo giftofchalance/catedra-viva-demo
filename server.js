@@ -58,6 +58,7 @@ let activeCourseId = 'macro'; // 'macro' | 'probabilidades' | 'finanzas'
 
 let liveSession = {
   isActive: false,
+  classClosed: false,
   courseId: activeCourseId,
   classTitle: 'Clase en Vivo',
   startTime: null,
@@ -96,6 +97,7 @@ function resetLiveSessionData(keepChatMode = false) {
   liveSession.chapters = [{ minute: '00:00', seconds: 0, title: 'Apertura y Objetivos' }];
   liveSession.elapsedSeconds = 0;
   liveSession.isActive = false;
+  liveSession.classClosed = false;
   liveSession.tokenomics = {
     totalQueries: 0,
     cacheHits: 0,
@@ -199,6 +201,34 @@ function autoResolveClustersFromVoice(course, newEntry) {
     }
   });
   return resolvedNow;
+}
+
+/**
+ * Actualiza capítulos inteligentes con Debounce compartido entre Audio Real y Simulador:
+ * mínimo 5 palabras, no digresión y >=20s desde el último capítulo (o primer capítulo tras apertura).
+ */
+function maybeUpdateSmartChapters(newEntry, labeled, secNum, timestamp) {
+  if (!newEntry || newEntry.category === 'digresion') return;
+  const wordCount = (newEntry.text || '').split(/\s+/).filter(Boolean).length;
+  if (wordCount < 5) return;
+
+  const candidateTitle = (labeled?.chapterTitle && labeled.chapterTitle.length > 3)
+    ? labeled.chapterTitle
+    : (newEntry.slideRef?.title || null);
+  if (!candidateTitle || candidateTitle.length <= 3) return;
+
+  const lastChapter = liveSession.chapters[liveSession.chapters.length - 1];
+  const lastChapterSec = lastChapter?.seconds || 0;
+  const isDifferentTitle = !lastChapter || lastChapter.title.toLowerCase() !== candidateTitle.toLowerCase();
+  const enoughTimeElapsed = (secNum - lastChapterSec) >= 20 || liveSession.chapters.length === 1;
+
+  if (isDifferentTitle && enoughTimeElapsed) {
+    liveSession.chapters.push({
+      minute: timestamp,
+      seconds: secNum,
+      title: candidateTitle
+    });
+  }
 }
 
 const app = express();
@@ -362,6 +392,7 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
     const secNum = parseInt(elapsedSeconds, 10) || liveSession.elapsedSeconds || 0;
     liveSession.elapsedSeconds = Math.max(liveSession.elapsedSeconds, secNum + 4);
     liveSession.isActive = true;
+    liveSession.classClosed = false;
 
     const m = Math.floor(secNum / 60);
     const s = Math.floor(secNum % 60);
@@ -414,27 +445,8 @@ app.post('/api/live/audio-chunk', upload.single('audio'), async (req, res) => {
     // Auto-Resolución Hands-Free: si había dudas abiertas sobre este tópico y el profe acaba de retomarlo
     autoResolveClustersFromVoice(currentCourse, newEntry);
 
-    // Actualizar capítulos inteligentes con Debounce (mínimo 5 palabras, no digresión y >=15s desde el último capítulo)
-    const wordCount = newEntry.text.split(/\s+/).filter(Boolean).length;
-    if (
-      labeled.chapterTitle &&
-      labeled.chapterTitle.length > 3 &&
-      labeled.category !== 'digresion' &&
-      wordCount >= 5
-    ) {
-      const lastChapter = liveSession.chapters[liveSession.chapters.length - 1];
-      const lastChapterSec = lastChapter?.seconds || 0;
-      const isDifferentTitle = !lastChapter || lastChapter.title.toLowerCase() !== labeled.chapterTitle.toLowerCase();
-      const enoughTimeElapsed = (secNum - lastChapterSec) >= 15 || liveSession.chapters.length === 1;
-
-      if (isDifferentTitle && enoughTimeElapsed) {
-        liveSession.chapters.push({
-          minute: timestamp,
-          seconds: secNum,
-          title: labeled.chapterTitle
-        });
-      }
-    }
+    // Actualizar capítulos inteligentes con Debounce compartido
+    maybeUpdateSmartChapters(newEntry, labeled, secNum, timestamp);
 
     const pace = calculatePaceMetrics(liveSession.entries);
 
@@ -530,10 +542,14 @@ app.post('/api/simulator/step-chunk', async (req, res) => {
 
       liveSession.entries.push(newEntry);
       liveSession.isActive = true;
+      liveSession.classClosed = false;
       liveSession.elapsedSeconds = startSecond + durationSeconds;
 
       // Auto-Resolución Hands-Free en simulador también
       autoResolveClustersFromVoice(currentCourse, newEntry);
+
+      // Capítulos inteligentes en simulador también
+      maybeUpdateSmartChapters(newEntry, labeled, startSecond, timestamp);
     }
 
     const pace = calculatePaceMetrics(liveSession.entries);
@@ -645,7 +661,7 @@ app.post('/api/live/pulse', (req, res) => {
 
 app.get('/api/live/capsule', (req, res) => {
   const course = getCourse(activeCourseId);
-  const capsule = generateFusedPostClassCapsule(course, liveSession.entries, liveSession.topicClusters);
+  const capsule = generateFusedPostClassCapsule(course, liveSession.entries, liveSession.topicClusters, liveSession.questions);
   res.json({ success: true, capsule });
 });
 
@@ -654,7 +670,7 @@ app.post('/api/teacher/close-class', async (req, res) => {
     const course = getCourse(activeCourseId);
     console.log(`[Cátedra Viva] Cerrando sesión y generando resumen + Apunte Vivo Fusionado para ${course.code}...`);
 
-    const capsule = generateFusedPostClassCapsule(course, liveSession.entries, liveSession.topicClusters);
+    const capsule = generateFusedPostClassCapsule(course, liveSession.entries, liveSession.topicClusters, liveSession.questions);
     liveSession.lastCapsule = capsule;
 
     const summary = await generateClassSummary(course, liveSession.entries);
@@ -667,6 +683,7 @@ app.post('/api/teacher/close-class', async (req, res) => {
     // Habilitar automáticamente el Modo Post-Clase Full IA tras el cierre
     liveSession.teacherSettings.chatState = 'full_ia';
     liveSession.isActive = false;
+    liveSession.classClosed = true;
 
     res.json({
       success: true,
@@ -713,11 +730,28 @@ app.post('/api/chat', async (req, res) => {
       bypassCache: !!bypassCache
     });
 
+    const slideMatch = matchSlideForSegment(activeCourseId, cleanQ);
+    const detectedTopic = detectTopicCluster({
+      text: cleanQ,
+      course: currentCourse,
+      liveEntries: liveSession.entries,
+      slideRef: slideMatch
+    });
+
     const questionId = `Q-${liveSession.questions.length + 1}`;
+    const rawAns = (response.answer || '').replace(/\s+/g, ' ').trim();
+    const answerSummary = rawAns.length > 260 ? rawAns.slice(0, 257) + '...' : rawAns;
+
     liveSession.questions.push({
       id: questionId,
       question: cleanQ,
+      answerSummary,
+      chatMode: response.chatMode || liveSession.teacherSettings.chatState || 'active',
+      phase: liveSession.classClosed ? 'post_class' : 'in_class',
       questionType: response.questionType || 'grounded',
+      topicKey: detectedTopic?.key || 'general',
+      topicLabel: detectedTopic?.label || 'General',
+      fromCache: !!response.fromCache,
       timestamp: currentTimeFormatted,
       createdAt: new Date().toISOString()
     });
@@ -734,7 +768,6 @@ app.post('/api/chat', async (req, res) => {
     // Agrupar en Radar del Profe / Auxiliar solo durante la clase en vivo (no reabrir Radar en estudio Post-Clase Full IA)
     let clusterInfo = null;
     if (response.questionType !== 'off_topic' && liveSession.teacherSettings.chatState !== 'full_ia') {
-      const slideMatch = matchSlideForSegment(activeCourseId, cleanQ);
       const cluster = upsertTopicCluster({
         course: currentCourse,
         text: cleanQ,

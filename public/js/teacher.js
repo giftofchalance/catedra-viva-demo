@@ -243,6 +243,18 @@ function bindEvents() {
     if (!latestCapsuleData) return;
     if (activeCapsuleTab === 'pauta') {
       downloadMarkdownFile(`Pauta_Auxiliar_${latestCapsuleData.courseCode}.md`, latestCapsuleData.taGuideMarkdown);
+    } else if (activeCapsuleTab === 'insights') {
+      const qa = latestCapsuleData.qaLog || { inClassQuestions: [], postClassQuestions: [] };
+      const lines = [
+        `# Data & Insights Docentes — ${latestCapsuleData.courseCode}: ${latestCapsuleData.courseName}`,
+        '',
+        `## Dudas Durante la Clase (${qa.inClassQuestions.length})`,
+        ...qa.inClassQuestions.map(q => `- **[${q.timestamp}] (${q.topicLabel})** P: ${q.question}\n  - R: ${q.answerSummary}`),
+        '',
+        `## Estudio Post-Clase Full IA (${qa.postClassQuestions.length})`,
+        ...qa.postClassQuestions.map(q => `- **[${q.timestamp}] (${q.topicLabel})** P: ${q.question}\n  - R: ${q.answerSummary}`)
+      ].join('\n');
+      downloadMarkdownFile(`Data_Insights_${latestCapsuleData.courseCode}.md`, lines);
     } else {
       downloadMarkdownFile(`Apunte_Vivo_${latestCapsuleData.courseCode}.md`, latestCapsuleData.markdownExport);
     }
@@ -520,6 +532,81 @@ function renderFeedEntries(entries) {
 
 function renderCapsuleModal(capsule) {
   let html = '';
+
+  if (activeCapsuleTab === 'insights') {
+    const qa = capsule.qaLog || { totalValid: 0, inClassQuestions: [], postClassQuestions: [] };
+    const longi = capsule.longitudinalInsights;
+
+    const escapeAndBold = (str = '') => String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    let insHtml = `
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+        <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-left:3px solid #10B981; border-radius:var(--radius-sm); padding:10px 12px;">
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Consultas Durante la Clase</div>
+          <div class="tabular-nums" style="font-size:1.35rem; font-weight:800; color:#6EE7B7;">${qa.inClassQuestions.length} ${qa.inClassQuestions.length === 1 ? 'duda' : 'dudas'}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">Guardadas anónimamente con su respuesta</div>
+        </div>
+        <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-left:3px solid #8B5CF6; border-radius:var(--radius-sm); padding:10px 12px;">
+          <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase;">Estudio Post-Clase (Full IA)</div>
+          <div class="tabular-nums" style="font-size:1.35rem; font-weight:800; color:#DDD6FE;">${qa.postClassQuestions.length} ${qa.postClassQuestions.length === 1 ? 'consulta' : 'consultas'}</div>
+          <div style="font-size:0.72rem; color:var(--text-muted);">Preguntas profundas tras cerrar la sesión</div>
+        </div>
+      </div>
+    `;
+
+    insHtml += `
+      <div style="background: var(--surface-2); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px 12px;">
+        <strong style="color:#93C5FD;">💬 Preguntas y Respuestas Recopiladas (En Vivo vs. Post-Clase)</strong>
+        ${qa.totalValid === 0
+          ? `<div style="font-size:0.78rem; color:var(--text-muted); margin-top:4px;">Aún no hay preguntas académicas registradas en esta sesión.</div>`
+          : `<div style="display:flex; flex-direction:column; gap:8px; margin-top:8px;">
+              ${[...qa.postClassQuestions.map(q => ({ ...q, badge: '🟣 Post-Clase Full IA', bCol: '#DDD6FE' })), ...qa.inClassQuestions.map(q => ({ ...q, badge: q.chatMode === 'full_ia' ? '🟣 En Vivo (Full IA)' : '🟢 En Vivo', bCol: q.chatMode === 'full_ia' ? '#DDD6FE' : '#6EE7B7' }))].map(q => `
+                <div style="background:var(--bg); border:1px solid var(--border-subtle); border-radius:6px; padding:8px 10px;">
+                  <div style="display:flex; justify-content:space-between; font-size:0.7rem; margin-bottom:3px;">
+                    <span style="color:${q.bCol}; font-weight:700;">${q.badge} · ${escapeAndBold(q.topicLabel)}</span>
+                    <span class="tabular-nums" style="color:var(--text-muted);">[${q.timestamp}] ${q.fromCache ? '⚡ Caché seguro' : '🤖 LLM'}</span>
+                  </div>
+                  <div style="font-weight:600; color:#F8FAFC; font-size:0.8rem;">P: "${escapeAndBold(q.question)}"</div>
+                  <div style="color:var(--text-muted); font-size:0.77rem; margin-top:3px;">R: ${q.answerSummary ? escapeAndBold(q.answerSummary) : '(Modo Pizarra — enviada al Radar)'}</div>
+                </div>
+              `).join('')}
+            </div>`
+        }
+      </div>
+    `;
+
+    if (longi && longi.topBottlenecks) {
+      insHtml += `
+        <div style="background: rgba(59, 130, 246, 0.08); border:1px solid rgba(59, 130, 246, 0.28); border-radius:var(--radius-sm); padding:10px 12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+            <strong style="color:#93C5FD;">📊 Comparativa Longitudinal Inter-Semestral (Solo Posibilidad Opcional)</strong>
+            <span style="font-size:0.68rem; color:var(--text-muted);">Base: ${(longi.semestersAnalyzed || []).join(' + ')}</span>
+          </div>
+          <p style="font-size:0.75rem; color:var(--text-muted); margin:4px 0 8px 0;">
+            Herramienta opcional para el docente: muestra qué suele costar más según semestres pasados y qué ajustes didácticos bajaron las dudas.
+          </p>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${longi.topBottlenecks.map(b => `
+              <div style="background:var(--surface); border:1px solid var(--border-subtle); border-radius:6px; padding:8px 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.78rem; font-weight:700;">
+                  <span>${b.topic}</span>
+                  <span class="tabular-nums" style="color:#FCD34D; font-size:0.72rem;">En vivo: ${b.inClassPct}% • Post-clase: ${b.postClassPct}%</span>
+                </div>
+                <div style="font-size:0.76rem; color:#CBD5E1; margin-top:3px;">💡 <strong>Evidencia didáctica:</strong> ${b.strategyTested}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    capsuleBody.innerHTML = insHtml;
+    return;
+  }
 
   if (activeCapsuleTab === 'pauta') {
     if (!capsule.taFocusPoints || capsule.taFocusPoints.length === 0) {

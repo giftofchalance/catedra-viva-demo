@@ -7,7 +7,7 @@
  * - Bucket 3 (Micro-Labeler Texto):  Groq `openai/gpt-oss-20b` (30 RPM exclusivos para etiquetado)
  * - Bucket 4 (Chatbot Tutor #1):     Groq `qwen/qwen3.8-27b` (30 RPM exclusivos para preguntas de alumnos)
  * - Bucket 5 (Chatbot Tutor #2):     Groq `openai/gpt-oss-120b` (30 RPM exclusivos de respaldo para alumnos)
- * - Bucket 6 (Respaldo Externo):     Google `gemini-3.8-flash` (15 RPM en Google AI Studio)
+ * - Bucket 6 (Respaldo Externo):     Google `gemini-3.5-flash-lite` (Respaldo rápido en Google AI Studio)
  */
 
 import 'dotenv/config';
@@ -21,6 +21,9 @@ const WHISPER_SILENCE_HALLUCINATIONS = new Set([
   'bien', 'bien.', 'bueno', 'bueno.', 'sí', 'sí.', 'no', 'no.',
   'y', 'y.', 'o', 'eh', 'ah', 'mm', 'amén', 'amén.', 'subtítulos',
   'hola', 'hola.', 'adiós', 'hasta luego', '...', '.',
+  'música', 'música.', '(música)', '[música]', 'musica',
+  'aplausos', 'aplausos.', '(aplausos)', '[aplausos]',
+  'silencio', 'silencio.',
   'glosario técnico', 'glosario técnico.', 'clase universitaria en español', 'clase universitaria en español.'
 ]);
 
@@ -51,7 +54,7 @@ function cleanWhisperOutput(rawText) {
   }
 
   // Palabras sueltas aisladas que Whisper inventa ante ruido blanco de micrófono
-  const cleanPunct = low.replace(/[.,¡!¿?…]/g, '').trim();
+  const cleanPunct = low.replace(/[.,¡!¿?…()[\]]/g, '').trim();
   if (WHISPER_SILENCE_HALLUCINATIONS.has(low) || WHISPER_SILENCE_HALLUCINATIONS.has(cleanPunct)) {
     return '';
   }
@@ -97,7 +100,8 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
         const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
-          body: formData
+          body: formData,
+          signal: AbortSignal.timeout(15000)
         });
 
         if (res.status === 429) {
@@ -115,12 +119,12 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
     }
   }
 
-  // Fallback externo a Gemini 3.8 Flash
+  // Fallback externo a Gemini 3.5 Flash Lite
   if (GEMINI_API_KEY) {
     try {
       const base64Audio = audioBuffer.toString('base64');
-      const prompt = `Transcribe exactamente lo que dice el profesor en este fragmento de clase en español. Si solo hay silencio, respiración o ruido de fondo, responde únicamente la palabra: SILENCIO. Glosario: ${glossaryPrompt}`;
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
+      const prompt = 'Transcribe exactamente lo que dice el profesor en este fragmento de clase en español. Si solo hay silencio, música, respiración o ruido de fondo, responde únicamente la palabra: SILENCIO.';
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -131,7 +135,8 @@ export async function transcribeLiveAudio(audioBuffer, mimeType = 'audio/mp3') {
             ]
           }],
           generationConfig: { temperature: 0.1 }
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       });
 
       if (res.ok) {
@@ -190,10 +195,10 @@ Devuelve ÚNICAMENTE un objeto JSON válido con este formato exacto:
 }
 
 REGLAS CRÍTICAS DE CLASIFICACIÓN:
-1. "concepto_clave": Cualquier explicación académica, presentación del tema, introducción de modelos (incluso de otros ramos como IS-LM, finanzas, probabilidades o cálculo), definiciones o desarrollo de la clase. ¡Por defecto usa "concepto_clave"!
+1. "concepto_clave": Cualquier explicación académica, presentación del tema, introducción de modelos (incluso de otros ramos como IS-LM, finanzas, probabilidades o cálculo), definiciones o desarrollo de la clase. Si el profesor usa una metáfora o ejemplo cotidiano (ej. fútbol, canasta de huevos, casino, cocina) PARA EXPLICAR un concepto del curso, clasifícalo SIEMPRE como "concepto_clave", NUNCA como "digresion". ¡Por defecto usa "concepto_clave"!
 2. "formula": Cuando mencione ecuaciones, variables matemáticas, derivadas, probabilidades o cálculos.
 3. "importancia": Avisos docentes relevantes, énfasis ("ojo con esto", "importante", "entra en la prueba") o presentación inicial del profesor ("Soy el profesor...").
-4. "digresion": ÚSALO SOLAMENTE si hablan de fútbol, chistes, clima, comida o temas 100% no académicos. NUNCA etiquetes un concepto universitario como digresión.`;
+4. "digresion": ÚSALO ÚNICAMENTE cuando sea charla 100% desconectada de la materia (ej. avisos logísticos de sala, paraguas perdido, chiste aislado sin propósito pedagógico). NUNCA etiquetes un concepto ni una analogía docente como digresión.`;
 
   const userPrompt = `Frases previas:\n${prevContext || '(Inicio de la sesión)'}\n\nFrase actual:\n"${text}"`;
 
@@ -213,8 +218,14 @@ REGLAS CRÍTICAS DE CLASIFICACIÓN:
         response_format: { type: 'json_object' },
         temperature: 0.1,
         max_tokens: 450
-      })
+      }),
+      signal: AbortSignal.timeout(15000)
     });
+
+    if (res.status === 429) {
+      console.warn('[labelAndCleanSegment] 429 en openai/gpt-oss-20b, usando heurística reforzada');
+      return fallback;
+    }
 
     if (res.ok) {
       const data = await res.json();
@@ -265,13 +276,15 @@ function normalizeSpokenTerms(text) {
 
 function detectHeuristicCategory(text) {
   const low = text.toLowerCase();
+  const hasAcademicTerm = /\b(diversific|riesgo|varianza|correlaci[oó]n|portafolio|capm|beta|wacc|van|tir|is-lm|curva is|curva lm|tasa de inter[eé]s|tipo de inter[eé]s|pib|inversi[oó]n|ahorro|banco central|pol[ií]tica fiscal|pol[ií]tica monetaria|bayes|probabilidad|ecuaci[oó]n|modelo|hip[oó]tesis|demanda|oferta|inflaci[oó]n|multiplicador|equilibrio|crowding out|derivada|integral|l[ií]mite|flujo de caja)\b/i.test(text);
+
   if (low.includes('=') || low.includes('suma') || low.includes('dividido') || low.includes('integral') || low.includes('derivada') || low.includes('al cuadrado') || low.includes('probabilidad de')) {
     return 'formula';
   }
   if (low.includes('ojo') || low.includes('importante') || low.includes('prueba') || low.includes('examen') || low.includes('soy el profesor') || low.includes('bienvenidos')) {
     return 'importancia';
   }
-  if (low.includes('fútbol') || low.includes('mundial') || low.includes('almorzar') || low.includes('chiste') || low.includes('película')) {
+  if (!hasAcademicTerm && /(paraguas|porter[ií]a|pasillo|botado|entrada del edificio|estacionamiento|f[uú]tbol|mundial|almorzar|almuerzo|chiste|pel[ií]cula|netflix|clima|lluvia)/i.test(text)) {
     return 'digresion';
   }
   return 'concepto_clave';
@@ -453,9 +466,11 @@ export function detectTopicCluster({ text = '', course, liveEntries = [], slideR
 // --------------------------------------------------------------------------
 
 const SAFE_SEMANTIC_CACHE = new Map();
+const IN_FLIGHT_QUERIES = new Map();
 
 export function clearSemanticCache() {
   SAFE_SEMANTIC_CACHE.clear();
+  IN_FLIGHT_QUERIES.clear();
 }
 
 function extractLogicalSignature(text = '') {
@@ -547,8 +562,81 @@ function estimateTokenMetrics({ fullContextText, question, answerText, fromCache
   };
 }
 
+function normalizeSearchText(text = '') {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 /**
- * 4. Tutor Pedagógico Modular en 3 Modos (Buckets 4, 5 y 6 Exclusivos: qwen/qwen3.8-27b -> openai/gpt-oss-120b -> gemini-3.8-flash)
+ * Guardia determinista anti-falso off-topic:
+ * Detecta si la pregunta contiene términos académicos reales del curso o de TOPIC_RULES
+ * (evita que premisas falsas como "curva IS pendiente positiva" sean rechazadas como off-topic).
+ */
+function hasCourseAcademicKeyword(question = '', course = null) {
+  const normQ = normalizeSearchText(question);
+  if (!normQ) return false;
+
+  for (const rule of TOPIC_RULES) {
+    if (rule.keywords.some(kw => normQ.includes(normalizeSearchText(kw)))) {
+      return true;
+    }
+  }
+
+  const shortAcronyms = ['pib', 'van', 'tir', 'capm', 'wacc', 'is-lm', 'islm', 'curva is', 'curva lm'];
+  for (const acr of shortAcronyms) {
+    const escaped = acr.replace('-', '\\-');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(normQ)) {
+      return true;
+    }
+  }
+
+  const glossaryTerms = (course?.glossary || '')
+    .split(',')
+    .map(t => normalizeSearchText(t.trim()))
+    .filter(t => t.length >= 4);
+
+  if (glossaryTerms.some(term => normQ.includes(term))) {
+    return true;
+  }
+
+  const slides = course?.ucursosSync?.slides || [];
+  for (const sl of slides) {
+    const slideKws = (sl.keywords || []).map(k => normalizeSearchText(k)).filter(k => k.length >= 4);
+    if (slideKws.some(kw => normQ.includes(kw))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Helper compartido para invocar Bucket 6 (gemini-3.5-flash-lite).
+ */
+async function callGeminiFlashLite({ promptText, temperature = 0.2, maxOutputTokens = 900, jsonMode = false }) {
+  if (!GEMINI_API_KEY) return null;
+  const generationConfig = { temperature, maxOutputTokens };
+  if (jsonMode) generationConfig.responseMimeType = 'application/json';
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: promptText }] }],
+      generationConfig
+    }),
+    signal: AbortSignal.timeout(15000)
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+}
+
+/**
+ * 4. Tutor Pedagógico Modular en 3 Modos (Buckets 4, 5 y 6 Exclusivos: qwen/qwen3.8-27b -> openai/gpt-oss-120b -> gemini-3.5-flash-lite)
  * - chatState === 'paused'  -> Modo Pizarra (pausa respuestas, registra duda en Radar)
  * - chatState === 'active'  -> Modo Seguimiento y Participación (Default: 2-3 líneas + cómo preguntar en voz alta / Radar)
  * - chatState === 'full_ia' -> Modo Tutor Full IA (Desbloqueado por el Profe o en Post-Clase)
@@ -588,12 +676,33 @@ export async function answerStudentQuestion({
   // 2. Construir Contexto Estructurado (Láminas U-Cursos si existen + En Vivo [VIVO-X] + Historial + Materiales)
   let contextBlocks = [];
 
-  // A. Transcripción en Vivo de la Clase de Hoy (Prioridad #1)
+  // A. Transcripción en Vivo de la Clase de Hoy (Prioridad #1 + Compactación inteligente en clases extendidas >18 bloques)
   if (liveEntries.length > 0) {
-    liveEntries.forEach((entry) => {
+    let selectedEntries = liveEntries;
+    if (liveEntries.length > 18) {
+      const recentStartIdx = liveEntries.length - 12;
+      const qTokens = tokenizeSemanticCore(question);
+      const earlierMatched = [];
+      for (let idx = 0; idx < recentStartIdx; idx++) {
+        const entry = liveEntries[idx];
+        const low = (entry.text || '').toLowerCase();
+        if (
+          entry.category === 'importancia' ||
+          entry.category === 'formula' ||
+          qTokens.some(tk => low.includes(tk))
+        ) {
+          earlierMatched.push(entry);
+        }
+      }
+      selectedEntries = [
+        ...earlierMatched.slice(-8),
+        ...liveEntries.slice(recentStartIdx)
+      ];
+    }
+    selectedEntries.forEach((entry) => {
       const segId = entry.id;
-      const slideNote = entry.slideRef ? ` | Asociado a Lámina ${entry.slideRef.number}: "${entry.slideRef.title}"` : '';
-      contextBlocks.push(`[${segId}] (Dicho EN VIVO hoy en min [${entry.timestamp}]${slideNote} por ${entry.speaker}):\n"${entry.text}"`);
+      const slideTag = entry.slideRef ? ` | ${entry.slideRef.id}` : '';
+      contextBlocks.push(`[${segId} | ${entry.timestamp}${slideTag}]: "${entry.text}"`);
     });
   }
 
@@ -621,7 +730,10 @@ export async function answerStudentQuestion({
 
   const fullContextText = contextBlocks.join('\n\n---\n\n');
 
-  // 3. Revisar Caché Semántico Seguro (Solo si no pidió enfoque alternativo y no cambió ni negación ni minuto/entradas)
+  // 3. Revisar Caché Semántico Seguro + Single-Flight Coalescing (Solo si no pidió enfoque alternativo y no cambió ni negación ni minuto/entradas)
+  const normalizedFlightQ = question.toLowerCase().replace(/[¿?¡!.,\s]+/g, ' ').trim();
+  const flightKey = `${course.id}:${chatMode}:${liveEntries.length}:${extractLogicalSignature(question)}:${normalizedFlightQ}`;
+
   if (!bypassCache) {
     const cachedHit = checkSafeSemanticCache({
       question,
@@ -636,7 +748,21 @@ export async function answerStudentQuestion({
         tokenMetrics: estimateTokenMetrics({
           fullContextText,
           question,
-          answerText: cachedHit.answer,
+          answerText: cachedHit.answer + (cachedHit.complement || ''),
+          fromCache: true
+        })
+      };
+    }
+
+    if (IN_FLIGHT_QUERIES.has(flightKey)) {
+      const sharedPayload = await IN_FLIGHT_QUERIES.get(flightKey);
+      return {
+        ...sharedPayload,
+        fromCache: true,
+        tokenMetrics: estimateTokenMetrics({
+          fullContextText,
+          question,
+          answerText: sharedPayload.answer + (sharedPayload.complement || ''),
           fromCache: true
         })
       };
@@ -661,7 +787,8 @@ export async function answerStudentQuestion({
   * Responde en MÁXIMO 2 a 3 líneas concisas y directas.
   * Adaptación Modular Automática según la pregunta: si requiere una fórmula puntual, incluye el término clave en $LaTeX$; si es conceptual, resume la relación causal en 1 frase clara; si mezcla ambos, únelos en máximo 3 líneas.
   * Cita siempre las fuentes exactas "[VIVO-X]", "[SLIDE-X]", "[HIST-X]" o "[MAT-X]".
-  * OBLIGATORIO en dudas académicas (CASO C o CASO B): Al final de tu respuesta, escribe exactamente una línea con la marca "@@VOZ_ALTA@@" seguida de 1 sola pregunta corta, natural y respetuosa formulada en primera persona para que el estudiante se atreva a levantar la mano y preguntársela en voz alta al profesor (ej: "@@VOZ_ALTA@@ Profesor, respecto al CAPM, ¿eso significa que el riesgo idiosincrático no recibe premio en el retorno exigido?").`;
+  * ORDEN OBLIGATORIO DE SALIDA: Primero escribe SIEMPRE los 2 a 3 renglones de respuesta/corrección citando [VIVO-X] o [SLIDE-X]; NUNCA empieces con @@VOZ_ALTA@@. Coloca @@VOZ_ALTA@@ ÚNICAMENTE en la última línea después de tu respuesta.
+  * OBLIGATORIO en dudas académicas (CASO C o CASO B): En esa última línea tras tu explicación, escribe "@@VOZ_ALTA@@" seguido de 1 sola pregunta corta, natural y respetuosa formulada en primera persona para que el estudiante se atreva a levantar la mano y preguntársela en voz alta al profesor (ej: "@@VOZ_ALTA@@ Profesor, respecto al CAPM, ¿eso significa que el riesgo idiosincrático no recibe premio en el retorno exigido?").`;
 
   const altAngleNote = bypassCache
     ? `\nNOTA EXTRA: El alumno pidió "Explicar desde otro ángulo". Usa una analogía distinta, otro ejemplo o enfoque diferente al habitual.`
@@ -671,26 +798,26 @@ export async function answerStudentQuestion({
 
 ${modeRules}${altAngleNote}
 
-FILTRO ESTRICTO DE ALCANCE (APLICA EN TODOS LOS MODOS):
-1. CASO A (OFF-TOPIC / AJENO A LA UNIVERSIDAD: fútbol, mundial, farándula, chistes, capitales de países, sumas triviales tipo 3+3 sin contexto del ramo, videojuegos):
-   Empieza tu respuesta con la marca exacta "@@OFF_TOPIC@@" y escribe únicamente:
-   "🚫 Esa pregunta no está relacionada con la clase ni con materias académicas del curso."
-   (NUNCA agregues @@VOZ_ALTA@@ ni @@COMPLEMENTO@@ en CASO A).
+ORDEN ESTRICTO DE PRIORIDAD AL RESPONDER:
+1. PRIORIDAD 1 — DUDA ACADÉMICA DEL CURSO (EN FUENTES O CON PREMISA FALSA):
+   Si la pregunta menciona cualquier concepto del ramo (incluso si contiene un error conceptual o premisa falsa, como atribuir una pendiente equivocada o invertir una definición), RESPONDE SIEMPRE como CASO C citando "[VIVO-X]", "[SLIDE-X]", "[HIST-X]" o "[MAT-X]".
+   - ANTI-PREMISA FALSA: Si la premisa del estudiante contradice lo dicho por el profesor o las láminas, NO le sigas la corriente; corrige respetuosa y explícitamente la premisa citando "[VIVO-X]" o "[SLIDE-X]" antes de responder el resto.
+   - DEIXIS TEMPORAL: Si el alumno pregunta por "lo último", "recién" o "esta parte" sin nombrar un concepto específico, enfócate directamente en los últimos 2 fragmentos "[VIVO-X]" más recientes de la transcripción en vivo.
+   ${chatMode === 'full_ia' ? '- En Modo Full IA entrega aquí la explicación completa (intuición + fórmulas en $LaTeX$ + conexión histórica + pregunta de chequeo).' : ''}
+   ${chatMode === 'full_ia' && teacherSettings.allowComplement ? '- Si agregas analogías o derivaciones que van más allá de lo escrito textualmente en las fuentes, colócalas después de "@@COMPLEMENTO@@".' : ''}
 
-2. CASO B (DUDA ACADÉMICA UNIVERSITARIA VÁLIDA, PERO CUYO TÓPICO NO APARECE EN NINGUNA FUENTE):
-   Usa "@@SIN_FUENTE_CLASE@@" ÚNICAMENTE cuando el tema principal preguntado NO aparezca ni en [VIVO-X], ni en [SLIDE-X], ni en [HIST-X], ni en [MAT-X].
-   Empieza tu respuesta con "@@SIN_FUENTE_CLASE@@" seguida de:
+2. PRIORIDAD 2 — DUDA ACADÉMICA UNIVERSITARIA NO VISTA AÚN EN FUENTES:
+   Solo si es un tema universitario válido cuyo concepto principal NO aparece ni en [VIVO-X], ni en [SLIDE-X], ni en [HIST-X], ni en [MAT-X], empieza con "@@SIN_FUENTE_CLASE@@" seguido de:
    "Eso aún no se ha mencionado en lo que va de clase ni en el material cargado."
    ${teacherSettings.allowComplement
-     ? `Y luego agrega "@@COMPLEMENTO@@" seguido de ${chatMode === 'active' ? '2 líneas de orientación breve.' : 'una explicación académica rigurosa.'}`
+     ? `Luego agrega "@@COMPLEMENTO@@" seguido de ${chatMode === 'active' ? '2 líneas de orientación breve.' : 'una explicación académica rigurosa.'}`
      : `Invita brevemente a enviarla al Radar del Profesor/Auxiliar.`}
    ${chatMode === 'active' ? 'Incluye además al final "@@VOZ_ALTA@@" con 1 frase sugerida para preguntarle si lo veremos hoy.' : ''}
 
-3. CASO C (EL TEMA SÍ APARECE EN [VIVO-X], [SLIDE-X], [HIST-X] O [MAT-X]):
-   Si el concepto o sigla preguntada aparece aunque sea brevemente en [VIVO-X], [SLIDE-X], [HIST-X] o [MAT-X], RESPONDE DIRECTO como CASO C (NO uses @@SIN_FUENTE_CLASE@@).
-   Prioriza siempre lo dicho EN VIVO hoy ([VIVO-X]) y las láminas ([SLIDE-X]), citando siempre con corchetes exactos.
-   ${chatMode === 'full_ia' ? 'En Modo Full IA entrega aquí la explicación completa (intuición + fórmulas en $LaTeX$ + conexión histórica + pregunta de chequeo).' : ''}
-   ${chatMode === 'full_ia' && teacherSettings.allowComplement ? 'Si agregas analogías o derivaciones que van más allá de lo escrito textualmente en las fuentes, colócalas después de "@@COMPLEMENTO@@".' : ''}`;
+3. ÚLTIMO RECURSO — ESTRICTAMENTE OFF-TOPIC:
+   ÚNICAMENTE para temas 100% ajenos a la universidad (fútbol, farándula, chistes, videojuegos, capitales de países), responde exclusivamente:
+   "@@OFF_TOPIC@@ 🚫 Esa pregunta no está relacionada con la clase ni con materias académicas del curso."
+   (Sin @@VOZ_ALTA@@ ni @@COMPLEMENTO@@).`;
 
   const userPrompt = `[MINUTO ACTUAL]: ${currentTimeFormatted}
 
@@ -702,13 +829,14 @@ ${fullContextText || '(La clase recién comienza)'}
 
 Respuesta:`;
 
-  // 5. Pool Exclusivo del Chatbot (Bucket 4: qwen/qwen3.8-27b -> Bucket 5: openai/gpt-oss-120b -> Bucket 6: gemini-3.8-flash)
-  let rawAnswer = '';
-  let modelUsed = '';
+  // 5. Pool Exclusivo del Chatbot (Bucket 4: qwen/qwen3.8-27b -> Bucket 5: openai/gpt-oss-120b -> Bucket 6: gemini-3.5-flash-lite)
+  const executeChatbotPipeline = async () => {
+    let rawAnswer = '';
+    let modelUsed = '';
+    const maxTokens = chatMode === 'full_ia' ? 1800 : 900;
+    const groqTemp = bypassCache ? 0.45 : 0.2;
 
-  if (GROQ_API_KEY) {
-    const chatModels = ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b'];
-    for (const modelId of chatModels) {
+    const callGroqChat = async (modelId) => {
       try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
@@ -722,127 +850,199 @@ Respuesta:`;
               { role: 'system', content: systemInstruction },
               { role: 'user', content: userPrompt }
             ],
-            temperature: bypassCache ? 0.45 : 0.2,
-            max_tokens: chatMode === 'full_ia' ? 950 : 380
-          })
+            temperature: groqTemp,
+            max_tokens: maxTokens
+          }),
+          signal: AbortSignal.timeout(15000)
         });
 
         if (res.status === 429) {
           console.warn(`[Chatbot Pool] Rate limit en ${modelId}, rotando...`);
-          continue;
+          return '';
         }
 
         if (res.ok) {
           const data = await res.json();
-          rawAnswer = data.choices?.[0]?.message?.content?.trim() || '';
-          if (rawAnswer) {
+          const content = data.choices?.[0]?.message?.content?.trim() || '';
+          if (content) {
             modelUsed = modelId;
-            break;
+            return content;
           }
         }
       } catch (err) {
         console.warn(`[Chatbot Pool] Fallo con ${modelId}:`, err.message);
       }
-    }
-  }
+      return '';
+    };
 
-  if (!rawAnswer && GEMINI_API_KEY) {
-    try {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemInstruction}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: bypassCache ? 0.45 : 0.2, maxOutputTokens: chatMode === 'full_ia' ? 950 : 380 }
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        rawAnswer = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-        modelUsed = 'gemini-3.8-flash';
+    if (GROQ_API_KEY) {
+      for (const modelId of ['qwen/qwen3.8-27b', 'openai/gpt-oss-120b']) {
+        rawAnswer = await callGroqChat(modelId);
+        if (rawAnswer) break;
       }
-    } catch (e) {
-      console.warn('[Chatbot Pool] Fallo en fallback Gemini:', e.message);
     }
-  }
 
-  if (!rawAnswer) {
-    throw new Error('No se pudo obtener respuesta de ningún motor de IA.');
-  }
+    // Failover inmediato a Gemini 3.5 Flash Lite (sin esperar cooldown) si Groq se saturó por TPM
+    if (!rawAnswer && GEMINI_API_KEY) {
+      try {
+        const gemText = await callGeminiFlashLite({
+          promptText: `${systemInstruction}\n\n${userPrompt}`,
+          temperature: groqTemp,
+          maxOutputTokens: maxTokens
+        });
+        if (gemText) {
+          rawAnswer = gemText;
+          modelUsed = 'gemini-3.5-flash-lite';
+        }
+      } catch (e) {
+        console.warn('[Chatbot Pool] Fallo en fallback Gemini:', e.message);
+      }
+    }
 
-  const isOffTopic = rawAnswer.includes('@@OFF_TOPIC@@');
-  const isUnseenAcademic = rawAnswer.includes('@@SIN_FUENTE_CLASE@@');
+    // Último reintento con cooldown de 2000ms solo si fallaron los 3 motores anteriores
+    if (!rawAnswer && GROQ_API_KEY) {
+      await new Promise(r => setTimeout(r, 2000));
+      rawAnswer = await callGroqChat('openai/gpt-oss-120b');
+    }
 
-  let cleanedRaw = rawAnswer
-    .replace(/@@OFF_TOPIC@@/g, '')
-    .replace(/@@SIN_FUENTE_CLASE@@/g, '')
-    .trim();
+    if (!rawAnswer) {
+      throw new Error('No se pudo obtener respuesta de ningún motor de IA.');
+    }
 
-  // Extraer marca @@VOZ_ALTA@@ (pregunta sugerida para levantar la mano)
-  let voicePrompt = null;
-  if (cleanedRaw.includes('@@VOZ_ALTA@@')) {
-    const vParts = cleanedRaw.split('@@VOZ_ALTA@@');
-    cleanedRaw = vParts[0].trim();
-    voicePrompt = vParts.slice(1).join(' ').replace(/^["'«“]|["'»”]$/g, '').trim();
-  }
+    // Guardia determinista: si el modelo marcó falsamente @@OFF_TOPIC@@ pese a palabras académicas del ramo
+    let looksOffTopic = rawAnswer.includes('@@OFF_TOPIC@@') || rawAnswer.trim().startsWith('🚫');
+    if (looksOffTopic && hasCourseAcademicKeyword(question, course) && GEMINI_API_KEY) {
+      try {
+        console.warn('[Chatbot Guard] Posible falso @@OFF_TOPIC@@ detectado en pregunta académica; corrigiendo vía gemini-3.5-flash-lite...');
+        const correctivePrompt = `${systemInstruction}\n\nNOTA CRÍTICA DEL SISTEMA: Esta pregunta SÍ pertenece al curso "${course.name}" (contiene conceptos académicos reales del ramo, posiblemente con una premisa falsa). NO respondas como off-topic ni uses @@OFF_TOPIC@@ ni 🚫. Corrige cualquier premisa falsa citando [VIVO-X] o [SLIDE-X].\n\n${userPrompt}`;
+        const retryText = await callGeminiFlashLite({
+          promptText: correctivePrompt,
+          temperature: 0.2,
+          maxOutputTokens: maxTokens
+        });
+        if (retryText && !retryText.includes('@@OFF_TOPIC@@') && !retryText.trim().startsWith('🚫')) {
+          rawAnswer = retryText;
+          modelUsed = 'gemini-3.5-flash-lite';
+          looksOffTopic = false;
+        }
+      } catch (guardErr) {
+        console.warn('[Chatbot Guard] Fallo al reintentar falso off-topic:', guardErr.message);
+      }
+    }
 
-  // Extraer marca @@COMPLEMENTO@@
-  let mainAnswer = cleanedRaw;
-  let complementText = null;
+    const parseMarkers = (raw) => {
+      const isOffTopicFlag = raw.includes('@@OFF_TOPIC@@') || raw.trim().startsWith('🚫');
+      const isUnseenFlag = raw.includes('@@SIN_FUENTE_CLASE@@');
 
-  if (cleanedRaw.includes('@@COMPLEMENTO@@')) {
-    const parts = cleanedRaw.split('@@COMPLEMENTO@@');
-    mainAnswer = parts[0].trim();
-    complementText = parts[1].trim();
-  }
+      let cleaned = raw
+        .replace(/@@OFF_TOPIC@@/g, '')
+        .replace(/@@SIN_FUENTE_CLASE@@/g, '')
+        .trim();
 
-  if (!teacherSettings.allowComplement || isOffTopic) {
-    complementText = null;
-  }
-  if (isOffTopic) {
-    voicePrompt = null;
-  }
+      let vp = null;
+      if (cleaned.includes('@@VOZ_ALTA@@')) {
+        const vParts = cleaned.split('@@VOZ_ALTA@@');
+        cleaned = vParts[0].trim();
+        vp = vParts.slice(1).join(' ').replace(/^["'«“]|["'»”]$/g, '').trim();
+      }
 
-  const questionType = isOffTopic ? 'off_topic' : isUnseenAcademic ? 'unseen_academic' : 'grounded';
+      let main = cleaned;
+      let comp = null;
+      if (cleaned.includes('@@COMPLEMENTO@@')) {
+        const parts = cleaned.split('@@COMPLEMENTO@@');
+        main = parts[0].trim();
+        comp = parts[1].trim();
+      }
 
-  const resultPayload = {
-    status: 'ok',
-    chatMode,
-    questionType,
-    canForwardToTeacher: !isOffTopic,
-    modelUsed,
-    fromCache: false,
-    answer: mainAnswer,
-    complement: complementText,
-    voicePrompt,
-    tokenMetrics: estimateTokenMetrics({
-      fullContextText,
-      question,
-      answerText: mainAnswer + (complementText || ''),
-      fromCache: false
-    }),
-    timestamp: new Date().toISOString()
+      if (!teacherSettings.allowComplement || isOffTopicFlag) comp = null;
+      if (isOffTopicFlag) vp = null;
+
+      return {
+        isOffTopic: isOffTopicFlag,
+        isUnseenAcademic: isUnseenFlag,
+        mainAnswer: main,
+        complementText: comp,
+        voicePrompt: vp
+      };
+    };
+
+    let parsed = parseMarkers(rawAnswer);
+
+    // Guardia anti-respuesta-vacía (ej. si el modelo empezó directamente con @@VOZ_ALTA@@ sin cuerpo explicativo)
+    if (!parsed.isOffTopic && parsed.mainAnswer.length < 15 && GEMINI_API_KEY) {
+      try {
+        console.warn('[Chatbot Guard] Respuesta sin cuerpo explicativo antes de @@VOZ_ALTA@@; corrigiendo vía gemini-3.5-flash-lite...');
+        const bodyRetryPrompt = `${systemInstruction}\n\nNOTA CRÍTICA: Tu respuesta anterior omitió el cuerpo explicativo antes de @@VOZ_ALTA@@. Escribe PRIMERO 2 a 3 líneas explicando y corrigiendo cualquier premisa falsa con citas [VIVO-X]/[SLIDE-X], y recién al final agrega @@VOZ_ALTA@@.\n\n${userPrompt}`;
+        const retryBodyText = await callGeminiFlashLite({
+          promptText: bodyRetryPrompt,
+          temperature: 0.2,
+          maxOutputTokens: maxTokens
+        });
+        if (retryBodyText) {
+          const retriedParsed = parseMarkers(retryBodyText);
+          if (retriedParsed.mainAnswer.length >= 15) {
+            parsed = retriedParsed;
+            modelUsed = 'gemini-3.5-flash-lite';
+          }
+        }
+      } catch (bodyGuardErr) {
+        console.warn('[Chatbot Guard] Fallo al reintentar cuerpo vacío:', bodyGuardErr.message);
+      }
+    }
+
+    const { isOffTopic, isUnseenAcademic, mainAnswer, complementText, voicePrompt } = parsed;
+    const questionType = isOffTopic ? 'off_topic' : isUnseenAcademic ? 'unseen_academic' : 'grounded';
+
+    const resultPayload = {
+      status: 'ok',
+      chatMode,
+      questionType,
+      canForwardToTeacher: !isOffTopic,
+      modelUsed,
+      fromCache: false,
+      answer: mainAnswer,
+      complement: complementText,
+      voicePrompt,
+      tokenMetrics: estimateTokenMetrics({
+        fullContextText,
+        question,
+        answerText: mainAnswer + (complementText || ''),
+        fromCache: false
+      }),
+      timestamp: new Date().toISOString()
+    };
+
+    if (!bypassCache && !isOffTopic) {
+      recordSafeSemanticCache({
+        question,
+        courseId: course.id,
+        chatMode,
+        transcriptCount: liveEntries.length,
+        payload: resultPayload
+      });
+    }
+
+    return resultPayload;
   };
 
-  if (!bypassCache && !isOffTopic) {
-    recordSafeSemanticCache({
-      question,
-      courseId: course.id,
-      chatMode,
-      transcriptCount: liveEntries.length,
-      payload: resultPayload
-    });
+  if (!bypassCache) {
+    const flightPromise = executeChatbotPipeline();
+    IN_FLIGHT_QUERIES.set(flightKey, flightPromise);
+    try {
+      return await flightPromise;
+    } finally {
+      IN_FLIGHT_QUERIES.delete(flightKey);
+    }
   }
 
-  return resultPayload;
+  return await executeChatbotPipeline();
 }
 
 /**
  * 5. Generador de "Apunte Vivo Fusionado" (Lámina U-Cursos + Explicación Oral + Énfasis + Radar Auxiliar)
  * Funciona tanto si el curso tiene láminas cargadas como si fue 100% pizarra libre (contexto plano).
  */
-export function generateFusedPostClassCapsule(course, liveEntries = [], topicClusters = []) {
+export function generateFusedPostClassCapsule(course, liveEntries = [], topicClusters = [], questionsLog = []) {
   const slides = course?.ucursosSync?.slides || [];
   const slideBlocks = slides.map(sl => {
     const matchedEntries = liveEntries.filter(e => e.slideRef && e.slideRef.id === sl.id);
@@ -863,6 +1063,11 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
     e.category === 'importancia' ||
     /\b(ojo|importante|control|prueba|examen|no confundan)\b/i.test(e.text || '')
   );
+
+  // Registro completo de Preguntas y Respuestas (En Vivo vs Post-Clase Full IA usando phase explícita)
+  const validQa = (questionsLog || []).filter(q => q.questionType !== 'off_topic');
+  const postClassQuestions = validQa.filter(q => (q.phase ? q.phase === 'post_class' : q.chatMode === 'full_ia'));
+  const inClassQuestions = validQa.filter(q => !(q.phase ? q.phase === 'post_class' : q.chatMode === 'full_ia'));
 
   // Puntos de refuerzo agrupados para el Auxiliar (Ayudantía)
   const taFocusPoints = (topicClusters || [])
@@ -930,6 +1135,15 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
     });
   }
 
+  if (postClassQuestions.length > 0) {
+    taMdLines.push(`## 🟣 Dudas de Estudio Post-Clase (Modo Full IA)`);
+    postClassQuestions.forEach(pq => {
+      taMdLines.push(`- **Pregunta:** *"${pq.question}"* (${pq.topicLabel || 'General'})`);
+      if (pq.answerSummary) taMdLines.push(`  - **Orientación entregada:** ${pq.answerSummary}`);
+    });
+    taMdLines.push('');
+  }
+
   return {
     courseCode: course.code,
     courseName: course.name,
@@ -939,6 +1153,12 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
     slideBlocks,
     unmappedEntries,
     taFocusPoints,
+    qaLog: {
+      totalValid: validQa.length,
+      inClassQuestions,
+      postClassQuestions
+    },
+    longitudinalInsights: course?.longitudinalInsights || null,
     markdownExport: mdLines.join('\n'),
     taGuideMarkdown: taMdLines.join('\n')
   };
@@ -948,7 +1168,26 @@ export function generateFusedPostClassCapsule(course, liveEntries = [], topicClu
  * 6. Generar Resumen Post-Clase para guardar en RAG Histórico
  */
 export async function generateClassSummary(course, liveEntries = []) {
-  const fullTranscript = liveEntries.map(e => `[${e.timestamp}] ${e.speaker}: ${e.text}`).join('\n');
+  // Compactar si excede 20 entradas para no agotar la cuota TPM de openai/gpt-oss-120b al cerrar clase
+  let compactEntries = liveEntries;
+  if (liveEntries.length > 20) {
+    const picked = [
+      ...liveEntries.slice(0, 5),
+      ...liveEntries.filter((e, i) => i >= 5 && i < liveEntries.length - 10 && (e.category === 'importancia' || e.category === 'formula')).slice(0, 5),
+      ...liveEntries.slice(-10)
+    ];
+    const seen = new Set();
+    compactEntries = picked.filter(e => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    });
+  }
+
+  let fullTranscript = compactEntries.map(e => `[${e.timestamp}] ${e.text}`).join('\n');
+  if (fullTranscript.length > 2500) {
+    fullTranscript = fullTranscript.slice(0, 2500);
+  }
 
   const systemInstruction = `Eres un asistente académico experto. Analiza la siguiente transcripción de clase del curso "${course.name}" y genera un resumen conciso estructurado para archivar en la base de datos histórica.
 Responde un JSON con:
@@ -971,16 +1210,32 @@ Responde un JSON con:
           ],
           response_format: { type: 'json_object' },
           temperature: 0.2
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       });
 
       if (res.ok) {
         const data = await res.json();
         return JSON.parse(data.choices?.[0]?.message?.content);
       }
+      console.warn(`[generateClassSummary] Groq status ${res.status}, usando fallback gemini-3.5-flash-lite...`);
     }
   } catch (err) {
-    console.warn('[generateClassSummary] Error:', err.message);
+    console.warn('[generateClassSummary] Error Groq:', err.message);
+  }
+
+  try {
+    const gemSummary = await callGeminiFlashLite({
+      promptText: `${systemInstruction}\n\nTranscripción:\n${fullTranscript || 'Sin transcripción'}`,
+      temperature: 0.2,
+      maxOutputTokens: 700,
+      jsonMode: true
+    });
+    if (gemSummary) {
+      return JSON.parse(gemSummary);
+    }
+  } catch (gemErr) {
+    console.warn('[generateClassSummary] Error fallback Gemini:', gemErr.message);
   }
 
   return {
