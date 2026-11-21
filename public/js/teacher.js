@@ -81,6 +81,12 @@ const ucursosDeckLabel = document.getElementById('ucursosDeckLabel');
 const ucursosSlidesList = document.getElementById('ucursosSlidesList');
 const chaptersList = document.getElementById('chaptersList');
 const addMaterialForm = document.getElementById('addMaterialForm');
+const uploadMaterialForm = document.getElementById('uploadMaterialForm');
+const uploadDocInput = document.getElementById('uploadDocInput');
+const uploadDocMode = document.getElementById('uploadDocMode');
+const btnUploadDoc = document.getElementById('btnUploadDoc');
+const ncFileInput = document.getElementById('ncFileInput');
+const btnSubmitNewCourse = document.getElementById('btnSubmitNewCourse');
 
 const statWpm = document.getElementById('statWpm');
 const statWords = document.getElementById('statWords');
@@ -107,8 +113,6 @@ const btnDownloadCapsule = document.getElementById('btnDownloadCapsule');
 const btnOpenPrivacy = document.getElementById('btnOpenPrivacy');
 const privacyModal = document.getElementById('privacyModal');
 const btnClosePrivacy = document.getElementById('btnClosePrivacy');
-const modalDeletedChunks = document.getElementById('modalDeletedChunks');
-const modalTokenomicsLine = document.getElementById('modalTokenomicsLine');
 
 const MODE_DESCRIPTIONS = {
   paused: 'Chat en pausa para atención 100% en pizarra. Las dudas se acumulan en el Radar.',
@@ -247,24 +251,51 @@ function bindEvents() {
     fetchState();
   });
 
-  // Nueva asignatura modal
+  // Nueva asignatura modal (archivo PDF/PPTX o texto manual)
   btnOpenNewCourse.addEventListener('click', () => newCourseModal.classList.add('active'));
   btnCloseNewCourse.addEventListener('click', () => newCourseModal.classList.remove('active'));
   newCourseForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const payload = {
-      code: document.getElementById('ncCode').value.trim(),
-      name: document.getElementById('ncName').value.trim(),
-      instructor: document.getElementById('ncInstructor').value.trim() || 'Docente',
-      slidesText: document.getElementById('ncSlidesText').value
-    };
-    const res = await fetch('/api/courses/custom', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
-    if (res.ok && data.course) {
+    const code = document.getElementById('ncCode').value.trim();
+    const name = document.getElementById('ncName').value.trim();
+    const instructor = document.getElementById('ncInstructor').value.trim() || 'Docente';
+    const slidesText = document.getElementById('ncSlidesText').value;
+    const file = ncFileInput?.files?.[0] || null;
+
+    if (!name && !file) {
+      showToast('Ingresa el nombre del curso o adjunta un archivo .pdf/.pptx.', 'warn');
+      return;
+    }
+
+    if (btnSubmitNewCourse) {
+      btnSubmitNewCourse.disabled = true;
+      btnSubmitNewCourse.textContent = file ? 'Leyendo archivo...' : 'Creando...';
+    }
+
+    try {
+      let res;
+      if (file) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('code', code);
+        fd.append('name', name);
+        fd.append('instructor', instructor);
+        fd.append('slidesText', slidesText);
+        res = await fetch('/api/courses/upload', { method: 'POST', body: fd });
+      } else {
+        res = await fetch('/api/courses/custom', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, name, instructor, slidesText })
+        });
+      }
+
+      const data = await res.json();
+      if (!res.ok || !data.course) {
+        showToast(data.error || 'No se pudo crear la asignatura', 'warn');
+        return;
+      }
+
       await refreshCoursesDropdown(data.course.id);
       newCourseModal.classList.remove('active');
       newCourseForm.reset();
@@ -272,12 +303,68 @@ function bindEvents() {
       renderedEntryCache.clear();
       feedList.querySelectorAll('.feed-item').forEach(el => el.remove());
       feedEmptyState.style.display = 'block';
-      showToast(`Sala creada para ${data.course.code}`, 'success');
+      const slidesLen = data.course.ucursosSync?.slides?.length || 0;
+      const msg = slidesLen > 0
+        ? `Sala ${data.course.code} creada (${slidesLen} láminas)`
+        : `Sala creada para ${data.course.code}`;
+      showToast(msg, 'success');
       fetchState();
+    } catch (err) {
+      showToast('Error de red al crear la clase: ' + err.message, 'warn');
+    } finally {
+      if (btnSubmitNewCourse) {
+        btnSubmitNewCourse.disabled = false;
+        btnSubmitNewCourse.textContent = 'Crear y Abrir Sala';
+      }
     }
   });
 
-  // Agregar material rápido en sesión
+  // Subida directa de archivo (.pdf, .pptx, .txt, .md) a la sesión actual
+  if (uploadMaterialForm) {
+    uploadMaterialForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = uploadDocInput?.files?.[0];
+      if (!file) {
+        showToast('Selecciona primero un archivo .pdf, .pptx, .txt o .md.', 'warn');
+        return;
+      }
+
+      const mode = uploadDocMode?.value === 'material' ? 'material' : 'slides';
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('mode', mode);
+
+      if (btnUploadDoc) {
+        btnUploadDoc.disabled = true;
+        btnUploadDoc.innerHTML = '<span>Procesando...</span>';
+      }
+
+      try {
+        const res = await fetch('/api/materials/upload', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showToast(data.error || 'No se pudo leer el archivo subido', 'warn');
+          return;
+        }
+
+        uploadMaterialForm.reset();
+        const msg = data.mode === 'slides'
+          ? `Se cargaron ${data.slidesCount} láminas de ${data.parsedMeta?.fileName || file.name}`
+          : `Guía ${data.material?.title || file.name} agregada al tutor`;
+        showToast(msg, 'success');
+        fetchState();
+      } catch (err) {
+        showToast('Error subiendo el archivo: ' + err.message, 'warn');
+      } finally {
+        if (btnUploadDoc) {
+          btnUploadDoc.disabled = false;
+          btnUploadDoc.innerHTML = '<span>Subir PDF / PPTX</span>';
+        }
+      }
+    });
+  }
+
+  // Agregar material rápido en sesión (texto manual)
   addMaterialForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const title = document.getElementById('matTitleInput').value.trim();
@@ -434,14 +521,6 @@ async function fetchState() {
     renderChapters(state.chapters);
     renderTopicClusters(state.topicClusters || []);
     updateRadarHero(state.topicClusters || [], state.lostCountTotal);
-
-    const tk = state.tokenomics || {};
-    const deletedCount = tk.ephemeralChunksDeleted || 0;
-    const savedTok = tk.prefixTokensSaved || 0;
-    if (modalDeletedChunks) modalDeletedChunks.textContent = deletedCount;
-    if (modalTokenomicsLine) {
-      modalTokenomicsLine.textContent = `Prefix/Cache: ${savedTok.toLocaleString()} tok ahorrados (${tk.cacheHits || 0} hits) · GPU U: $${(tk.onPremCostUsd || 0).toFixed(4)} vs Cloud $${(tk.cloudCostUsd || 0).toFixed(4)}`;
-    }
 
     renderFeedEntries(state.entries || []);
 

@@ -263,7 +263,14 @@ async function syncState() {
     currentClassClosed = Boolean(state.classClosed);
     currentIsActive = Boolean(state.isActive);
 
-    if (!currentCourse || currentCourse.id !== state.course.id) {
+    const courseChanged = !currentCourse || currentCourse.id !== state.course.id;
+    const materialsChanged = Boolean(currentCourse) && (
+      (currentCourse.ucursosSync?.slides?.length || 0) !== (state.course.ucursosSync?.slides?.length || 0) ||
+      (currentCourse.ucursosSync?.deckTitle || '') !== (state.course.ucursosSync?.deckTitle || '') ||
+      (currentCourse.materials?.length || 0) !== (state.course.materials?.length || 0)
+    );
+
+    if (courseChanged) {
       currentCourse = state.course;
       renderedFeedSignature = '';
       renderedEntryCache.clear();
@@ -275,6 +282,12 @@ async function syncState() {
       renderBridge(currentCourse);
       renderQuickChips(currentCourse);
       restoreConversationHistory(currentCourse.id);
+    } else if (materialsChanged) {
+      currentCourse = state.course;
+      renderedFeedSignature = '';
+      ucursosStatusTag.textContent = currentCourse.ucursosSync?.slides?.length
+        ? `${currentCourse.ucursosSync.slides.length} láminas`
+        : 'Pizarra Libre';
     }
 
     updateConnectionAndModeUI(currentIsActive, currentSettings.chatState || 'active', currentClassClosed);
@@ -287,10 +300,11 @@ async function syncState() {
 function updateConnectionAndModeUI(isLive, chatState, classClosed) {
   liveConnBadge.className = 'conn-pill';
   studentModeBadge.className = 'conn-pill';
+  const compactTopbar = window.innerWidth <= 520;
 
   if (classClosed) {
     liveConnBadge.classList.add('full-ia');
-    liveConnText.textContent = 'Post-Clase · Full IA';
+    liveConnText.textContent = compactTopbar ? 'Post-Clase' : 'Post-Clase · Full IA';
     studentModeBadge.classList.add('full-ia');
     studentModeBadge.textContent = 'Full IA · Post-Clase';
     whiteboardBanner.style.display = 'none';
@@ -299,7 +313,7 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
     postClassTranscriptBanner.style.display = 'flex';
   } else if (chatState === 'paused') {
     liveConnBadge.classList.add('warn');
-    liveConnText.textContent = 'En vivo · Pizarra';
+    liveConnText.textContent = compactTopbar ? 'Pizarra' : 'En vivo · Pizarra';
     studentModeBadge.classList.add('warn');
     studentModeBadge.textContent = 'Pizarra (Pausado)';
     whiteboardBanner.style.display = 'flex';
@@ -308,7 +322,7 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
     postClassTranscriptBanner.style.display = 'none';
   } else if (chatState === 'full_ia') {
     liveConnBadge.classList.add('full-ia');
-    liveConnText.textContent = isLive ? 'En vivo · Full IA' : 'Full IA';
+    liveConnText.textContent = compactTopbar ? 'Full IA' : (isLive ? 'En vivo · Full IA' : 'Full IA');
     studentModeBadge.classList.add('full-ia');
     studentModeBadge.textContent = 'Full IA · Completo';
     whiteboardBanner.style.display = 'none';
@@ -317,7 +331,7 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
     postClassTranscriptBanner.style.display = 'none';
   } else if (isLive) {
     liveConnBadge.classList.add('live');
-    liveConnText.textContent = 'En vivo · Seguimiento';
+    liveConnText.textContent = compactTopbar ? 'En vivo' : 'En vivo · Seguimiento';
     studentModeBadge.textContent = 'Seguimiento · Breve';
     whiteboardBanner.style.display = 'none';
     studentChatInput.placeholder = 'Pregunta rápida sobre la clase o cualquier duda...';

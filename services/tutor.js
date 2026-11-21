@@ -18,7 +18,7 @@ import {
 } from './semanticCache.js';
 
 const UNIVERSAL_ACADEMIC_PATTERNS = [
-  /\b(formula|ecuacion|grafico|pendiente|tasa|ejemplo|despejar|calcular|definicion|modelo|control|prueba|examen|ayudantia|demostracion|propiedad|teorema|variable|funcion|derivada|integral|varianza|correlacion|flujo|ley|principio|efecto|curva|equilibrio|serie|algebra|epsilon|epsilon|epsilon|epsilon|matriz|vector|limite|probabilidad|hipotesis|mercado|inversion|ahorro|dinero|interes|inflacion|banco central|impuesto|gasto)\b/,
+  /\b(formula|ecuacion|grafico|pendiente|tasa|ejemplo|despejar|calcular|definicion|modelo|control|prueba|examen|ayudantia|demostracion|propiedad|teorema|variable|funcion|derivada|integral|varianza|correlacion|flujo|ley|principio|efecto|curva|equilibrio|serie|algebra|epsilon|matriz|vector|limite|probabilidad|hipotesis|mercado|inversion|ahorro|dinero|interes|inflacion|banco central|impuesto|gasto)\b/,
   /\b(como funciona|que significa|por que sube|por que baja|por que cae|por que aumenta|por que disminuye|de donde sale)\b/,
   /[=<>\/\$]/
 ];
@@ -257,7 +257,7 @@ FILOSOFÍA DE ALCANCE GENEROSA (NUNCA DEJES FUERA UNA DUDA DE APRENDIZAJE):
    - Incluye dudas directas sobre [VIVO-X]/[SLIDE-X], **prerrequisitos matemáticos** (álgebra, despejes, series, derivadas), **ejemplos de actualidad** (ej. Banco Central, TPM, mercados reales), **conexiones interdisciplinarias**, **modismos coloquiales** ("wn no cacho...") y **premisas falsas**.
    - ANTI-PREMISA FALSA: Si el alumno asume algo erróneo (ej. afirmar que subir la TPM desplaza IS o que la curva IS tiene pendiente positiva), NO le sigas la corriente; corrige explícitamente con rigor económico/científico citando [VIVO-X] o [SLIDE-X] antes de responder.
    - DEIXIS TEMPORAL: Si pregunta por "lo último", "recién" o "esta parte", céntrate en los últimos 2 fragmentos [VIVO-X].
-   - PRECISIÓN CONCEPTUAL: En IS-LM, la política monetaria (TPM/oferta monetaria $M$) desplaza la curva **LM** y provoca movimiento a lo largo de la IS; la política fiscal ($G, T$) desplaza la curva **IS**.
+   - PRECISIÓN CONCEPTUAL: En IS-LM, la política monetaria (TPM/oferta monetaria $M$) actúa sobre la oferta monetaria y la liquidez (no confundir con demanda de dinero), desplaza la curva **LM** y provoca movimiento a lo largo de la IS; la política fiscal ($G, T$) desplaza la curva **IS**.
 
 2. PRIORIDAD 2 — TEMA ACADÉMICO VÁLIDO AÚN NO CUBIERTO EN LA CLASE DE HOY:
    - Si pregunta por un concepto universitario o subtema avanzado que no aparece aún en las fuentes de hoy, empieza con la marca oculta "@@SIN_FUENTE_CLASE@@" y usa un tono cálido y directo (SIN bloqueos ni frialdad):

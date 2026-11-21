@@ -15,9 +15,9 @@ Asistente pedagógico en tiempo real para salas de clase presenciales e híbrida
    - Se eliminó por completo la categoría `digresion`. El micro-etiquetado clasifica únicamente en `concepto_clave`, `formula`, `importancia` y `ejemplo`, preservando historias personales, ejemplos cotidianos y analogías que suelen sostener la intuición de la clase.
 
 3. **Agnosticismo curricular y cero carga extra**
-   - El agrupamiento de temas, el matching de láminas (`matchSlideForSegment`) y la creación dinámica de ramos/materiales (`POST /api/courses/custom`) funcionan sobre cualquier asignatura sin reglas hardcoded.
-   - Vista docente reducida a 2 zonas con 3 tarjetas principales, botón protagonista (`Iniciar Clase` / `Pausar` / `Terminar Clase`), captura acústica escalonada con solapamiento de `1.0s` y sin telemetría técnica de GPU en pantalla principal (accesible en el modal de Privacidad & GPU).
-   - Vista estudiante diseñada mobile-first (`48px` topbar en una fila, navegación inferior de 1 pulgar `En Vivo | Tutor | Me perdí`, botón **Citar** en transcripción y respuestas del tutor, persistencia en `sessionStorage` y citas clicables `[HIST-X]` / `[MAT-X]`).
+   - El agrupamiento de temas, el matching de láminas (`matchSlideForSegment`) y la carga dinámica de asignaturas/materiales funcionan sobre cualquier ramo sin reglas hardcoded, tanto copiando texto (`POST /api/courses/custom`) como subiendo archivos **`.pdf`, `.pptx`, `.txt` o `.md`** (`POST /api/courses/upload`, `POST /api/materials/upload`).
+   - Vista docente reducida a 2 zonas con 3 tarjetas principales, botón protagonista (`Iniciar Clase` / `Pausar` / `Terminar Clase`), captura acústica escalonada con solapamiento de `1.0s` y modal **Privacidad** limpio sin jerga ni telemetría USD invasiva.
+   - Vista estudiante diseñada mobile-first (`48px` topbar adaptativa en una fila, navegación inferior de 1 pulgar `En Vivo | Tutor | Me perdí`, botón **Citar** en transcripción y respuestas del tutor, persistencia en `sessionStorage` y citas clicables `[HIST-X]` / `[MAT-X]`).
 
 ---
 
@@ -27,8 +27,9 @@ Asistente pedagógico en tiempo real para salas de clase presenciales e híbrida
 
 - `server.js`: Servidor HTTP/Express en `http://localhost:3000`. Sirve `/`, `/profesor`, `/estudiante`, `/simulador` y monta las rutas modulares.
 - `state/sessionStore.js`: Estado centralizado de sesión en vivo (`liveSession`, `stateVersion`, `classClosed`), hub SSE (`addSseClient`, `bumpStateVersion`), gestión de clusters (`upsertTopicCluster`) y serialización pública (`buildPublicLiveState`).
-- `data/coursesDb.js`: Base de cursos de demostración (`COURSES_DB`), creación de cursos/materiales personalizados (`createCustomCourse`) y matching agnóstico por tokens (`matchSlideForSegment`).
-- `routes/courseRoutes.js`: Consulta de ramos y creación de cursos propios (`POST /api/courses/custom`).
+- `data/coursesDb.js`: Base de cursos de demostración (`COURSES_DB`), creación de cursos/materiales personalizados (`createCustomCourse`, `attachCourseSlides`) y matching agnóstico por tokens (`matchSlideForSegment`).
+- `routes/courseRoutes.js`: Consulta de ramos, creación desde texto o archivo (`POST /api/courses/custom`, `POST /api/courses/upload`) y subida de láminas/guías (`POST /api/materials/add`, `POST /api/materials/upload`).
+- `services/documentParser.js`: Extracción pura JS en memoria desde `.pptx` (`jszip`), `.pdf` (`unpdf`), `.txt` y `.md` (con guardia `422` ante PDFs escaneados sin texto).
 - `routes/liveRoutes.js`: Ingesta de audio con deduplicación por solapamiento, estado en vivo, stream SSE (`/api/live/stream`) y reinicio limpio (`/api/live/reset`).
 - `routes/chatRoutes.js`: Tutor contextual, Quote-Reply, historial por fase y generación de cápsula.
 - `services/llmClients.js`: Clientes centralizados para Groq Whisper, Groq Chat y Gemini `gemini-3.5-flash-lite` con `AbortSignal.timeout(15000)`.

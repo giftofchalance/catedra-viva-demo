@@ -38,9 +38,9 @@
         <span class="icon-slot" data-icon="book" data-size="14"></span>
         <span>Apunte Vivo</span>
       </button>
-      <button id="btnOpenPrivacy" type="button" class="btn btn-outline btn-sm" title="Privacidad, Audio Efímero y Tokenomics GPU">
+      <button id="btnOpenPrivacy" type="button" class="btn btn-outline btn-sm" title="Privacidad y uso de datos en sala">
         <span class="icon-slot" data-icon="shield" data-size="14"></span>
-        <span class="desktop-only-label">Privacidad y GPU</span>
+        <span class="desktop-only-label">Privacidad</span>
       </button>
       <a href="/estudiante" target="_blank" class="btn btn-success btn-sm">
         <span class="icon-slot" data-icon="external" data-size="14"></span>
@@ -194,11 +194,26 @@
             <div style="font-size:12px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.04em;">
               Láminas Auto-Sincronizadas
             </div>
+
+            <form id="uploadMaterialForm" style="background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:6px; padding:10px; display:flex; flex-direction:column; gap:8px;">
+              <div style="font-size:12px; font-weight:700; color:#93C5FD;">Subir archivo de clase (.pdf, .pptx, .txt, .md)</div>
+              <input id="uploadDocInput" type="file" accept=".pdf,.pptx,.txt,.md" class="chat-input" style="padding:6px 8px; font-size:12px; min-height:36px;">
+              <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                <select id="uploadDocMode" class="btn btn-outline btn-xs" style="flex:1; min-width:170px; height:32px;">
+                  <option value="slides">Cargar como láminas de hoy</option>
+                  <option value="material">Agregar como guía de apoyo</option>
+                </select>
+                <button id="btnUploadDoc" type="submit" class="btn btn-primary btn-xs" style="height:32px; padding:0 12px;">
+                  <span>Subir PDF / PPTX</span>
+                </button>
+              </div>
+            </form>
+
             <div id="ucursosDeckLabel" style="font-size:12px; color:var(--text);"></div>
             <div id="ucursosSlidesList" style="display:flex; flex-direction:column; gap:6px;"></div>
 
-            <details style="margin-top:8px; background:var(--surface-2); border-radius:6px; padding:10px;">
-              <summary style="cursor:pointer; font-size:12px; font-weight:700; color:#93C5FD;">+ Agregar material rápido a esta sesión</summary>
+            <details style="margin-top:4px; background:var(--surface-2); border-radius:6px; padding:10px;">
+              <summary style="cursor:pointer; font-size:12px; font-weight:700; color:#93C5FD;">+ Pegar texto manualmente</summary>
               <form id="addMaterialForm" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
                 <input id="matTitleInput" type="text" class="chat-input" style="min-height:34px; font-size:12px;" placeholder="Título (ej. Guía 3 o Resumen pizarra)">
                 <textarea id="matContentInput" rows="3" class="chat-input" style="font-size:12px;" placeholder="Pega definiciones o puntos clave para el tutor..."></textarea>
@@ -307,55 +322,31 @@
     </div>
   </div>
 
-  <!-- MODAL PRIVACIDAD Y TOKENOMICS GPU -->
+  <!-- MODAL PRIVACIDAD -->
   <div id="privacyModal" class="modal-overlay">
-    <div class="modal-card" style="max-width: 660px;">
+    <div class="modal-card" style="max-width: 520px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid var(--border-subtle);">
-        <h3 style="font-size: 16px;">Privacidad, Ética y Costos GPU Facultad</h3>
+        <h3 style="font-size: 16px;">Privacidad y Uso de Datos en Sala</h3>
         <button id="btnClosePrivacy" type="button" class="btn btn-outline btn-xs">Cerrar</button>
       </div>
       <div style="display:flex; flex-direction:column; gap:10px; font-size:13px; line-height:1.5;">
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--success);">
-          <strong>1. Audio 100% Efímero (0s Guardado — Cero Biometría)</strong>
+          <strong>1. Tu clase no queda grabada</strong>
           <p style="color: var(--text-muted); margin-top: 3px;">
-            Cada chunk de audio se transcribe y se destruye inmediatamente del servidor (<span id="modalDeletedChunks" class="tabular-nums" style="color:#6EE7B7; font-weight:700;">0</span> fragmentos borrados en esta sesión).
+            El audio se procesa únicamente en vivo para transcribir la explicación y se elimina inmediatamente del servidor; no guardamos grabaciones ni huellas de voz.
           </p>
         </div>
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--primary);">
-          <strong>2. Privacidad en 2 Capas (Anonimato del Estudiante)</strong>
+          <strong>2. Estudiantes 100% anónimos</strong>
           <p style="color: var(--text-muted); margin-top: 3px;">
-            Sin cuentas ni correos. Profesores y auxiliares solo reciben agregados por tópico en Capa 2.
+            No pedimos cuentas, correos ni RUT. Profesor y auxiliar solo ven dudas y señales agrupadas por tema en el Radar.
           </p>
         </div>
         <div style="background: var(--surface-2); padding: 10px 12px; border-radius: 6px; border-left: 3px solid var(--purple);">
-          <strong>3. Tokenomics de la Sesión &amp; GPU On-Premise (vLLM + Prefix Cache 92%)</strong>
-          <div id="modalTokenomicsLine" class="tabular-nums" style="font-family:var(--font-mono); font-size:12px; color:#DDD6FE; margin:4px 0 8px 0;">
-            Prefix/Cache: 0 tok ahorrados · GPU U: $0.0000 vs Cloud $0.0000
-          </div>
-          <table style="width:100%; border-collapse:collapse; font-size:12px; color:var(--text);">
-            <thead>
-              <tr style="border-bottom:1px solid var(--border-default); text-align:left; color:var(--text-muted);">
-                <th style="padding:4px;">Arquitectura (40 salas/día)</th>
-                <th style="padding:4px;">CapEx / OpEx Mes</th>
-                <th style="padding:4px;">TCO 3 Años</th>
-                <th style="padding:4px;">Soberanía</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr style="border-bottom:1px solid var(--border-subtle);">
-                <td style="padding:4px;">API Cloud Comercial</td>
-                <td style="padding:4px;">$0 / ~$1.500–$2.500</td>
-                <td style="padding:4px; color:#FCA5A5;">~$54.000–$90.000</td>
-                <td style="padding:4px;">Sale a EE.UU.</td>
-              </tr>
-              <tr>
-                <td style="padding:4px; font-weight:700; color:#6EE7B7;">2× RTX 4090 / 1× L40S (vLLM)</td>
-                <td style="padding:4px;">~$6.500–$12k / ~$95 luz</td>
-                <td style="padding:4px; font-weight:700; color:#6EE7B7;">~$10k–$15.4k (&gt;75% ahorro)</td>
-                <td style="padding:4px; color:#6EE7B7;">100% Red Campus</td>
-              </tr>
-            </tbody>
-          </table>
+          <strong>3. Transparencia de esta versión piloto</strong>
+          <p style="color: var(--text-muted); margin-top: 3px;">
+            Esta demo procesa el texto y la transcripción con modelos de IA en la nube (sin almacenar audio). En un despliegue institucional, el sistema está diseñado para operar en servidores propios de la universidad.
+          </p>
         </div>
       </div>
     </div>
@@ -370,17 +361,23 @@
       </div>
       <form id="newCourseForm" style="display:flex; flex-direction:column; gap:10px;">
         <div style="display:grid; grid-template-columns: 120px 1fr; gap:8px;">
-          <input id="ncCode" type="text" class="chat-input" placeholder="Código (ej. FI2002)" required>
-          <input id="ncName" type="text" class="chat-input" placeholder="Nombre del curso (ej. Electromagnetismo)" required>
+          <input id="ncCode" type="text" class="chat-input" placeholder="Código (ej. FI2002)">
+          <input id="ncName" type="text" class="chat-input" placeholder="Nombre del curso (o del archivo)">
         </div>
         <input id="ncInstructor" type="text" class="chat-input" placeholder="Nombre del profesor (opcional)">
+        <div style="background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:6px; padding:10px;">
+          <label for="ncFileInput" style="font-size:12px; font-weight:700; color:#93C5FD; display:block; margin-bottom:6px;">
+            Adjuntar presentación o guía (.pdf, .pptx, .txt, .md — opcional):
+          </label>
+          <input id="ncFileInput" type="file" accept=".pdf,.pptx,.txt,.md" class="chat-input" style="width:100%; padding:6px 8px; font-size:12px; min-height:36px;">
+        </div>
         <div>
           <label style="font-size:12px; color:var(--text-muted); display:block; margin-bottom:4px;">
-            Láminas o pauta de la clase (opcional — separa cada lámina con <code>---</code>; si queda vacío inicia como Pizarra Libre):
+            O pega láminas en texto (opcional — separa con <code>---</code>; si queda vacío sin archivo inicia como Pizarra Libre):
           </label>
-          <textarea id="ncSlidesText" rows="5" class="chat-input" style="width:100%;" placeholder="Lámina 1: Ley de Faraday&#10;El flujo magnético varía en el tiempo&#10;---&#10;Lámina 2: Ley de Lenz&#10;La corriente inducida se opone al cambio"></textarea>
+          <textarea id="ncSlidesText" rows="4" class="chat-input" style="width:100%;" placeholder="Lámina 1: Ley de Faraday&#10;El flujo magnético varía en el tiempo&#10;---&#10;Lámina 2: Ley de Lenz&#10;La corriente inducida se opone al cambio"></textarea>
         </div>
-        <button type="submit" class="btn btn-primary">Crear y Abrir Sala</button>
+        <button id="btnSubmitNewCourse" type="submit" class="btn btn-primary">Crear y Abrir Sala</button>
       </form>
     </div>
   </div>

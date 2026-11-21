@@ -377,41 +377,113 @@ export function addCourseMaterial(courseId, materialData) {
   return newMaterial;
 }
 
+function normalizeSlidesArray(rawSlides = []) {
+  return (rawSlides || [])
+    .filter(s => s && (s.title || (Array.isArray(s.bulletPoints) && s.bulletPoints.length > 0)))
+    .slice(0, 40)
+    .map((s, idx) => {
+      const title = String(s.title || `Lámina ${idx + 1}`).trim() || `Lámina ${idx + 1}`;
+      const bullets = Array.isArray(s.bulletPoints) && s.bulletPoints.length > 0
+        ? s.bulletPoints.map(b => String(b || '').trim()).filter(Boolean).slice(0, 6)
+        : [title];
+      return {
+        id: `SLIDE-${idx + 1}`,
+        number: idx + 1,
+        title,
+        keywords: Array.isArray(s.keywords) ? s.keywords : [],
+        bulletPoints: bullets.length > 0 ? bullets : [title]
+      };
+    });
+}
+
+function mergeCourseGlossaryTokens(existingGlossary = '', extraText = '', maxAdded = 25) {
+  const existingParts = String(existingGlossary || '')
+    .split(',')
+    .map(p => p.trim())
+    .filter(Boolean);
+  const existingSet = new Set(existingParts.map(p => normalizeSearchText(p)));
+  const candidates = extractMeaningfulTokens(extraText, 4);
+
+  let added = 0;
+  for (const token of candidates) {
+    const norm = normalizeSearchText(token);
+    if (!norm || existingSet.has(norm)) continue;
+    existingSet.add(norm);
+    existingParts.push(token);
+    added += 1;
+    if (added >= maxAdded) break;
+  }
+  return existingParts.join(', ');
+}
+
 /**
- * Crea un curso personalizado al vuelo desde texto/slides opcionales.
+ * Reemplaza o sincroniza las láminas activas de un curso desde un archivo PDF/PPTX/texto.
+ */
+export function attachCourseSlides(courseId, { deckTitle = 'Archivo Cargado en Sesión', slides = [] } = {}) {
+  const course = getCourse(courseId);
+  const normalizedSlides = normalizeSlidesArray(slides);
+  if (normalizedSlides.length === 0) return course;
+
+  const slidesPlainText = normalizedSlides
+    .map(s => `${s.title} ${(s.bulletPoints || []).join(' ')}`)
+    .join(' ');
+
+  course.ucursosSync = {
+    synced: true,
+    sourceLabel: 'Archivo Cargado en Sesión',
+    deckTitle: (deckTitle || `${course.code} — Láminas de Clase`).trim(),
+    slides: normalizedSlides
+  };
+  course.glossary = mergeCourseGlossaryTokens(course.glossary, `${deckTitle} ${slidesPlainText}`);
+  return course;
+}
+
+/**
+ * Crea un curso personalizado al vuelo desde archivo PDF/PPTX o texto opcional.
  * Si no se entrega material, arranca en modo Pizarra Libre sin fricción.
  */
-export function createCustomCourse({ code = 'CURSO-101', name = 'Clase Personalizada', instructor = 'Docente', slidesText = '', glossary = '' }) {
+export function createCustomCourse({
+  code = 'CURSO-101',
+  name = 'Clase Personalizada',
+  instructor = 'Docente',
+  slidesText = '',
+  glossary = '',
+  parsedSlides = null,
+  deckTitle = null
+}) {
   const cleanCode = (code || 'CURSO-101').trim().toUpperCase().slice(0, 16);
   const cleanName = (name || 'Clase Personalizada').trim().slice(0, 80);
   const baseId = normalizeSearchText(cleanCode || cleanName).replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'custom';
   const id = COURSES_DB[baseId] ? `${baseId}_${Date.now().toString().slice(-4)}` : baseId;
 
-  const rawBlocks = (slidesText || '').trim()
-    ? (slidesText.includes('---')
-        ? slidesText.split(/^\s*---+\s*$/m)
-        : slidesText.split(/\n\s*\n+/))
-        .map(b => b.trim())
-        .filter(Boolean)
-    : [];
+  let slides = [];
+  if (Array.isArray(parsedSlides) && parsedSlides.length > 0) {
+    slides = normalizeSlidesArray(parsedSlides);
+  } else {
+    const rawBlocks = (slidesText || '').trim()
+      ? (slidesText.includes('---')
+          ? slidesText.split(/^\s*---+\s*$/m)
+          : slidesText.split(/\n\s*\n+/))
+          .map(b => b.trim())
+          .filter(Boolean)
+      : [];
 
-  const slides = rawBlocks.map((block, idx) => {
-    const lines = block
-      .split('\n')
-      .map(l => l.replace(/^#+\s*/, '').replace(/^[-*•]\s*/, '').trim())
-      .filter(Boolean);
-    const title = (lines[0] || `Lámina ${idx + 1}`).replace(/^L[áa]mina\s*\d+\s*[:.-]?\s*/i, '').trim() || `Lámina ${idx + 1}`;
-    const bulletPoints = lines.length > 1 ? lines.slice(1, 6) : [title];
-    return {
-      id: `SLIDE-${idx + 1}`,
-      number: idx + 1,
-      title,
-      keywords: [],
-      bulletPoints
-    };
-  });
+    const textSlides = rawBlocks.map((block, idx) => {
+      const lines = block
+        .split('\n')
+        .map(l => l.replace(/^#+\s*/, '').replace(/^[-*•]\s*/, '').trim())
+        .filter(Boolean);
+      const title = (lines[0] || `Lámina ${idx + 1}`).replace(/^L[áa]mina\s*\d+\s*[:.-]?\s*/i, '').trim() || `Lámina ${idx + 1}`;
+      const bulletPoints = lines.length > 1 ? lines.slice(1, 6) : [title];
+      return { title, bulletPoints };
+    });
+    slides = normalizeSlidesArray(textSlides);
+  }
 
-  const inferredTokens = [...new Set(extractMeaningfulTokens(`${cleanName} ${slidesText}`, 4))].slice(0, 20);
+  const parsedTextForGlossary = slides.map(s => `${s.title} ${(s.bulletPoints || []).join(' ')}`).join(' ');
+  const inferredTokens = [...new Set(extractMeaningfulTokens(`${cleanName} ${slidesText} ${parsedTextForGlossary}`, 4))].slice(0, 25);
+  const resolvedDeckTitle = (deckTitle || '').trim() || `${cleanCode} — Láminas de Clase`;
+
   const newCourse = {
     id,
     code: cleanCode,
@@ -425,8 +497,8 @@ export function createCustomCourse({ code = 'CURSO-101', name = 'Clase Personali
     ucursosSync: slides.length > 0
       ? {
           synced: true,
-          sourceLabel: 'Material Cargado en Sesión',
-          deckTitle: `${cleanCode} — Láminas de Clase`,
+          sourceLabel: deckTitle ? 'Archivo Cargado en Sesión' : 'Material Cargado en Sesión',
+          deckTitle: resolvedDeckTitle,
           slides
         }
       : {

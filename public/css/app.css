@@ -578,6 +578,14 @@ body.app-viewport-locked {
   .desktop-only-label { display: none; }
 }
 
+@media (max-width: 560px) {
+  .topbar { padding: 6px 10px; gap: 6px; }
+  .brand-wrap { gap: 7px; }
+  .brand-icon { width: 28px; height: 28px; }
+  .brand-title { font-size: 13px; }
+  .conn-pill { padding: 3px 7px; font-size: 11px; gap: 4px; }
+}
+
 /* ==========================================
    FEED Y CITAS
    ========================================== */
