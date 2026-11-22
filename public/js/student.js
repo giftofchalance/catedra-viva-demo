@@ -25,9 +25,10 @@ let activeTranscriptFilter = 'all';
 let lastKnownChatState = null;
 let lastKnownClassClosed = null;
 
-// Memoria conversacional y Quote activa
+// Memoria conversacional, Dudas en Standby y Quote activa
 let activeQuotedContext = null; // { type: 'assistant' | 'transcript', refId, label, text }
 let conversationTurns = []; // [{ role: 'user' | 'assistant', text, quoteLabel, meta }]
+let standbyDoubts = []; // [{ id, text, timestamp, anchorEntryId, anchorText, quotedContext }]
 
 // Mapa de render incremental para el feed del profesor
 let renderedFeedSignature = '';
@@ -57,6 +58,10 @@ const btnPulseExample = document.getElementById('btnPulseExample');
 
 const modeToastBanner = document.getElementById('modeToastBanner');
 const whiteboardBanner = document.getElementById('whiteboardBanner');
+const standbyDrawer = document.getElementById('standbyDrawer');
+const standbySummaryText = document.getElementById('standbySummaryText');
+const standbyStatusPill = document.getElementById('standbyStatusPill');
+const standbyList = document.getElementById('standbyList');
 const quickPromptChips = document.getElementById('quickPromptChips');
 const chatMessages = document.getElementById('chatMessages');
 const quoteComposerBar = document.getElementById('quoteComposerBar');
@@ -64,6 +69,8 @@ const quoteComposerText = document.getElementById('quoteComposerText');
 const btnClearQuote = document.getElementById('btnClearQuote');
 const studentChatForm = document.getElementById('studentChatForm');
 const studentChatInput = document.getElementById('studentChatInput');
+const btnSaveStandby = document.getElementById('btnSaveStandby');
+const btnSendChatLabel = document.getElementById('btnSendChatLabel');
 
 // Mobile bottom nav
 const mobNavTranscript = document.getElementById('mobNavTranscript');
@@ -170,6 +177,7 @@ function bindUIEvents() {
 
   btnClearQuote.addEventListener('click', clearQuotedContext);
   studentChatForm.addEventListener('submit', (e) => handleChatSubmit(e));
+  btnSaveStandby?.addEventListener('click', handleManualStandbyClick);
 
   const openCapsule = async () => {
     const res = await fetch('/api/live/capsule');
@@ -186,7 +194,14 @@ function bindUIEvents() {
   btnStudentCloseCapsule.addEventListener('click', () => studentCapsuleModal.classList.remove('active'));
   btnStudentDownloadCapsule.addEventListener('click', () => {
     if (!latestStudentCapsule) return;
-    const blob = new Blob([latestStudentCapsule.markdownExport], { type: 'text/markdown;charset=utf-8' });
+    let exportMd = latestStudentCapsule.markdownExport || '';
+    if (standbyDoubts.length > 0) {
+      const notesMd = standbyDoubts
+        .map(d => `- **[${d.timestamp}]** ${d.text}${d.quotedContext ? ` *(citando: ${d.quotedContext.label})*` : ''}`)
+        .join('\n');
+      exportMd += `\n\n## Mis Dudas Anotadas Durante la Clase\n${notesMd}\n`;
+    }
+    const blob = new Blob([exportMd], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -254,6 +269,175 @@ function restoreConversationHistory(courseId) {
   } catch (_) {}
 }
 
+function getStandbyStorageKey(courseId) {
+  return `catedra_v4_standby_${courseId}`;
+}
+
+function saveStandbyDoubts() {
+  if (!currentCourse) return;
+  try {
+    sessionStorage.setItem(getStandbyStorageKey(currentCourse.id), JSON.stringify(standbyDoubts.slice(-25)));
+  } catch (_) {}
+}
+
+function restoreStandbyDoubts(courseId) {
+  standbyDoubts = [];
+  try {
+    const saved = sessionStorage.getItem(getStandbyStorageKey(courseId));
+    if (saved) {
+      const items = JSON.parse(saved);
+      if (Array.isArray(items)) {
+        standbyDoubts = items.filter(it => it && it.id && it.text);
+      }
+    }
+  } catch (_) {}
+  renderStandbyDrawer();
+}
+
+function addStandbyDoubt({ text, timestamp = '00:00', anchorEntryId = null, anchorText = null, quotedContext = null }) {
+  const cleanText = String(text || '').trim();
+  if (!cleanText) return null;
+
+  const item = {
+    id: `SB-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    text: cleanText,
+    timestamp,
+    anchorEntryId,
+    anchorText,
+    quotedContext: quotedContext ? { ...quotedContext } : null
+  };
+
+  standbyDoubts.push(item);
+  saveStandbyDoubts();
+  renderStandbyDrawer();
+  if (standbyDrawer) standbyDrawer.open = true;
+  return item;
+}
+
+function renderStandbyDrawer() {
+  if (!standbyDrawer || !standbyList) return;
+
+  if (standbyDoubts.length === 0) {
+    standbyDrawer.style.display = 'none';
+    standbyList.innerHTML = '';
+    return;
+  }
+
+  standbyDrawer.style.display = 'block';
+  standbySummaryText.textContent = `Dudas anotadas (${standbyDoubts.length})`;
+
+  const canResolveNow = currentClassClosed || currentSettings.chatState !== 'paused';
+  standbyStatusPill.className = `standby-pill ${canResolveNow ? 'is-ready' : 'is-waiting'}`;
+  standbyStatusPill.textContent = canResolveNow ? 'Listas para resolver' : 'En espera · Pizarra';
+
+  standbyList.innerHTML = '';
+  standbyDoubts.forEach(item => {
+    const row = document.createElement('div');
+    row.className = `standby-item ${canResolveNow ? 'is-ready' : ''}`;
+    const quoteChip = item.quotedContext?.label
+      ? `<span style="font-size:11px; color:var(--cite-color);">Sobre ${escapeHtml(item.quotedContext.label)}</span>`
+      : '';
+
+    row.innerHTML = `
+      <div class="standby-item-meta">
+        <button type="button" class="standby-time-btn" title="${item.anchorEntryId ? 'Ir a este minuto en la transcripción' : 'Minuto anotado'}">[${escapeHtml(item.timestamp || '00:00')}]</button>
+        ${quoteChip}
+      </div>
+      <div class="standby-item-text">${escapeHtml(item.text)}</div>
+      <div class="standby-item-actions">
+        <button type="button" class="btn ${canResolveNow ? 'btn-primary' : 'btn-outline'} btn-xs btn-resolve-standby" ${canResolveNow ? '' : 'disabled'}>
+          ${icon('send', 11)} <span>${canResolveNow ? 'Resolver ahora' : 'Esperando chat'}</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-xs btn-dismiss-standby">
+          ${icon('check', 11)} <span>Ya entendí</span>
+        </button>
+      </div>
+    `;
+
+    row.querySelector('.standby-time-btn')?.addEventListener('click', () => {
+      if (item.anchorEntryId) {
+        highlightTranscriptSource(`entry-${item.anchorEntryId}`);
+      }
+    });
+
+    const resolveBtn = row.querySelector('.btn-resolve-standby');
+    resolveBtn?.addEventListener('click', () => resolveStandbyDoubt(item.id, resolveBtn));
+
+    row.querySelector('.btn-dismiss-standby')?.addEventListener('click', () => {
+      standbyDoubts = standbyDoubts.filter(d => d.id !== item.id);
+      saveStandbyDoubts();
+      renderStandbyDrawer();
+      showToast('Duda descartada', 'info');
+    });
+
+    standbyList.appendChild(row);
+  });
+}
+
+async function resolveStandbyDoubt(id, btnEl = null) {
+  const item = standbyDoubts.find(d => d.id === id);
+  if (!item) return;
+
+  const canResolveNow = currentClassClosed || currentSettings.chatState !== 'paused';
+  if (!canResolveNow) {
+    showToast('El profesor aún está en Modo Pizarra.', 'warn');
+    return;
+  }
+
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.innerHTML = `${icon('clock', 11)} <span>Resolviendo...</span>`;
+  }
+
+  let contextForTutor = item.quotedContext || null;
+  if (!contextForTutor && item.anchorText) {
+    contextForTutor = {
+      type: 'transcript',
+      refId: item.anchorEntryId || null,
+      label: `min ${item.timestamp || '00:00'}`,
+      text: item.anchorText
+    };
+  }
+
+  const resolvedOk = await handleChatSubmit(null, item.text, false, {
+    overrideTime: item.timestamp || '00:00',
+    overrideQuote: contextForTutor,
+    appendUserBubble: true,
+    fromStandby: true
+  });
+
+  if (resolvedOk) {
+    standbyDoubts = standbyDoubts.filter(d => d.id !== id);
+    saveStandbyDoubts();
+    renderStandbyDrawer();
+  } else {
+    renderStandbyDrawer();
+  }
+}
+
+function handleManualStandbyClick() {
+  const q = studentChatInput.value.trim();
+  if (!q) {
+    showToast('Escribe una duda primero para anotarla en standby', 'warn');
+    studentChatInput.focus();
+    return;
+  }
+
+  const lastEntry = currentEntries[currentEntries.length - 1];
+  const timestamp = lastEntry ? lastEntry.timestamp : '00:00';
+  addStandbyDoubt({
+    text: q,
+    timestamp,
+    anchorEntryId: lastEntry?.id || null,
+    anchorText: lastEntry?.text || null,
+    quotedContext: activeQuotedContext
+  });
+
+  studentChatInput.value = '';
+  clearQuotedContext();
+  showToast(`Duda anotada para después [${timestamp}]`, 'success');
+}
+
 async function syncState() {
   try {
     const res = await fetch('/api/live/state');
@@ -282,6 +466,7 @@ async function syncState() {
       renderBridge(currentCourse);
       renderQuickChips(currentCourse);
       restoreConversationHistory(currentCourse.id);
+      restoreStandbyDoubts(currentCourse.id);
     } else if (materialsChanged) {
       currentCourse = state.course;
       renderedFeedSignature = '';
@@ -301,6 +486,14 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
   liveConnBadge.className = 'conn-pill';
   studentModeBadge.className = 'conn-pill';
   const compactTopbar = window.innerWidth <= 520;
+  const isPausedLive = !classClosed && chatState === 'paused';
+
+  if (btnSendChatLabel) {
+    btnSendChatLabel.textContent = isPausedLive ? 'Anotar' : 'Preguntar';
+  }
+  if (btnSaveStandby) {
+    btnSaveStandby.style.display = isPausedLive ? 'none' : 'inline-flex';
+  }
 
   if (classClosed) {
     liveConnBadge.classList.add('full-ia');
@@ -317,7 +510,7 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
     studentModeBadge.classList.add('warn');
     studentModeBadge.textContent = 'Pizarra (Pausado)';
     whiteboardBanner.style.display = 'flex';
-    studentChatInput.placeholder = 'Chat en pausa (tu duda va directo al Radar)...';
+    studentChatInput.placeholder = 'Anota tu duda para después (también suma al Radar)...';
     livePulseStrip.style.display = 'grid';
     postClassTranscriptBanner.style.display = 'none';
   } else if (chatState === 'full_ia') {
@@ -347,18 +540,29 @@ function updateConnectionAndModeUI(isLive, chatState, classClosed) {
     postClassTranscriptBanner.style.display = 'none';
   }
 
+  renderStandbyDrawer();
+
+  const unlockedFromPaused = lastKnownChatState === 'paused' && !lastKnownClassClosed && (classClosed || chatState !== 'paused');
+  if (unlockedFromPaused && standbyDoubts.length > 0 && standbyDrawer) {
+    standbyDrawer.open = true;
+  }
+
+  const standbyHint = (unlockedFromPaused && standbyDoubts.length > 0)
+    ? ` Tienes ${standbyDoubts.length} duda(s) anotada(s) listas para resolver.`
+    : '';
+
   if (lastKnownChatState !== null && (lastKnownChatState !== chatState || lastKnownClassClosed !== classClosed)) {
     if (classClosed && !lastKnownClassClosed) {
-      modeToastBanner.textContent = 'Clase finalizada. Ya puedes usar Full IA para estudiar en detalle o abrir el Apunte Vivo.';
+      modeToastBanner.textContent = `Clase finalizada. Ya puedes usar Full IA para estudiar en detalle o abrir el Apunte Vivo.${standbyHint}`;
       modeToastBanner.style.display = 'block';
     } else if (chatState === 'full_ia' && lastKnownChatState !== 'full_ia') {
-      modeToastBanner.textContent = 'El profesor habilitó Full IA en la sala para explicaciones completas.';
+      modeToastBanner.textContent = `El profesor habilitó Full IA en la sala para explicaciones completas.${standbyHint}`;
       modeToastBanner.style.display = 'block';
-      setTimeout(() => { modeToastBanner.style.display = 'none'; }, 4500);
+      setTimeout(() => { modeToastBanner.style.display = 'none'; }, standbyDoubts.length > 0 ? 7000 : 4500);
     } else if (chatState === 'active' && lastKnownChatState === 'paused') {
-      modeToastBanner.textContent = 'Chat reactivado en Modo Seguimiento.';
+      modeToastBanner.textContent = `Chat reactivado en Modo Seguimiento.${standbyHint}`;
       modeToastBanner.style.display = 'block';
-      setTimeout(() => { modeToastBanner.style.display = 'none'; }, 3500);
+      setTimeout(() => { modeToastBanner.style.display = 'none'; }, standbyDoubts.length > 0 ? 7000 : 3500);
     } else {
       modeToastBanner.style.display = 'none';
     }
@@ -531,24 +735,49 @@ function renderTranscript() {
   }
 }
 
-async function handleChatSubmit(e, customQuestion = null, bypassCache = false) {
+async function handleChatSubmit(e, customQuestion = null, bypassCache = false, extraOpts = {}) {
   if (e) e.preventDefault();
   const q = (customQuestion || studentChatInput.value).trim();
-  if (!q) return;
+  if (!q) return false;
 
-  const quoteToSend = customQuestion ? null : activeQuotedContext;
+  const lastEntry = currentEntries[currentEntries.length - 1];
+  const currentTime = extraOpts.overrideTime || (lastEntry ? lastEntry.timestamp : '00:00');
+  const quoteToSend = extraOpts.overrideQuote !== undefined
+    ? extraOpts.overrideQuote
+    : (customQuestion ? null : activeQuotedContext);
   const quoteLabel = quoteToSend ? quoteToSend.label : null;
 
-  if (!customQuestion) {
-    studentChatInput.value = '';
+  const isPausedLive = !currentClassClosed && currentSettings.chatState === 'paused';
+  if (isPausedLive && !extraOpts.fromStandby) {
+    if (!customQuestion) {
+      studentChatInput.value = '';
+      clearQuotedContext();
+    }
+    addStandbyDoubt({
+      text: q,
+      timestamp: currentTime,
+      anchorEntryId: lastEntry?.id || null,
+      anchorText: lastEntry?.text || null,
+      quotedContext: quoteToSend
+    });
+    showToast(`Duda anotada en standby [${currentTime}] y enviada al Radar`, 'success');
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, currentTimeFormatted: currentTime, quotedContext: quoteToSend })
+    }).catch(() => {});
+    return false;
+  }
+
+  if (!customQuestion || extraOpts.appendUserBubble) {
+    if (!customQuestion) {
+      studentChatInput.value = '';
+      clearQuotedContext();
+    }
     appendUserMessage(q, quoteLabel, true);
-    clearQuotedContext();
   }
 
   quickPromptChips.style.display = 'none';
-
-  const lastEntry = currentEntries[currentEntries.length - 1];
-  const currentTime = lastEntry ? lastEntry.timestamp : '00:00';
   const loadingBubble = appendAssistantLoading(bypassCache);
 
   // Enviar máximo últimos 4 mensajes previos (2 turnos) para mantener contexto sin inflar TPM
@@ -574,7 +803,17 @@ async function handleChatSubmit(e, customQuestion = null, bypassCache = false) {
     loadingBubble.remove();
 
     if (data.status === 'paused') {
-      appendAssistantMessage(data.answer, null, { isPaused: true, originalQuestion: q, currentTime });
+      if (!extraOpts.fromStandby) {
+        addStandbyDoubt({
+          text: q,
+          timestamp: currentTime,
+          anchorEntryId: lastEntry?.id || null,
+          anchorText: lastEntry?.text || null,
+          quotedContext: quoteToSend
+        });
+        showToast(`Modo Pizarra activo: duda guardada en standby [${currentTime}]`, 'warn');
+      }
+      return false;
     } else if (res.ok) {
       appendAssistantMessage(data.answer, data.complement, {
         chatMode: data.chatMode,
@@ -588,12 +827,15 @@ async function handleChatSubmit(e, customQuestion = null, bypassCache = false) {
         originalQuestion: q,
         currentTime
       });
+      return true;
     } else {
       appendAssistantMessage(`Error: ${data.error || 'No se pudo obtener respuesta.'}`, null, { skipPersist: true });
+      return false;
     }
   } catch (_) {
     loadingBubble.remove();
     appendAssistantMessage('Error de conexión con la sala.', null, { skipPersist: true });
+    return false;
   }
 }
 

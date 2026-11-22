@@ -17,7 +17,7 @@ Asistente pedagógico en tiempo real para salas de clase presenciales e híbrida
 3. **Agnosticismo curricular y cero carga extra**
    - El agrupamiento de temas, el matching de láminas (`matchSlideForSegment`) y la carga dinámica de asignaturas/materiales funcionan sobre cualquier ramo sin reglas hardcoded, tanto copiando texto (`POST /api/courses/custom`) como subiendo archivos **`.pdf`, `.pptx`, `.txt` o `.md`** (`POST /api/courses/upload`, `POST /api/materials/upload`).
    - Vista docente reducida a 2 zonas con 3 tarjetas principales, botón protagonista (`Iniciar Clase` / `Pausar` / `Terminar Clase`), captura acústica escalonada con solapamiento de `1.0s` y modal **Privacidad** limpio sin jerga ni telemetría USD invasiva.
-   - Vista estudiante diseñada mobile-first (`48px` topbar adaptativa en una fila, navegación inferior de 1 pulgar `En Vivo | Tutor | Me perdí`, botón **Citar** en transcripción y respuestas del tutor, persistencia en `sessionStorage` y citas clicables `[HIST-X]` / `[MAT-X]`).
+   - Vista estudiante diseñada mobile-first (`48px` topbar adaptativa en una fila, navegación inferior de 1 pulgar `En Vivo | Tutor | Me perdí`, botón **Citar** en transcripción y respuestas del tutor, bandeja de **Dudas en Standby** ancladas al `[MM:SS]` con `Resolver ahora` / `Ya entendí` y exportación en `.md`, persistencia en `sessionStorage` y citas clicables `[HIST-X]` / `[MAT-X]`).
 
 ---
 
@@ -46,7 +46,7 @@ Asistente pedagógico en tiempo real para salas de clase presenciales e híbrida
 - `public/js/icons.js`: Iconos SVG estilo Lucide uniformes, sanitización (`escapeHtml`, `formatMarkdownSafe`), notificaciones (`showToast`) y sincronización SSE (`connectLiveStateSync`).
 - `public/css/app.css`: Sistema visual Obsidian Graphite, escala tipográfica modular (`11–20px`), radios concéntricos, barra de navegación móvil inferior y compositor con **Quote-Reply**.
 - `public/index.html`: Selector limpio de roles (Profesor, Estudiante, Simulador).
-- `public/student.html` & `public/js/student.js`: Experiencia estudiante en vivo y post-clase, **Citar** mensajes/transcripción, referencias `[HIST-X]`/`[MAT-X]` y actualización incremental del DOM.
+- `public/student.html` & `public/js/student.js`: Experiencia estudiante en vivo y post-clase, **Citar** mensajes/transcripción, bandeja de **Dudas en Standby** (botón `Anotar` en Pizarra / reloj en vivo, `Resolver ahora` y `Ya entendí`), referencias `[HIST-X]`/`[MAT-X]` y actualización incremental del DOM.
 - `public/teacher.html` & `public/js/teacher.js`: Consola docente simplificada con 3 tarjetas principales, control único de inicio/cierre, captura continua solapada y gestión en línea de ramos/láminas.
 - `public/simulator.html`: Simulador interactivo con flujo completo de roles, **Quote-Reply** y citas clicables.
 

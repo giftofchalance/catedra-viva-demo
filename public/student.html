@@ -114,8 +114,19 @@
 
       <div id="whiteboardBanner" class="whiteboard-banner" style="display: none;">
         <span class="icon-slot" data-icon="pause" data-size="15"></span>
-        <span><strong>Modo Pizarra:</strong> Chat en pausa para enfocarse en sala; tus dudas igual se registran en el Radar.</span>
+        <span><strong>Modo Pizarra:</strong> Chat en pausa para enfocarse en sala; puedes anotar tus dudas en standby y también suman al Radar.</span>
       </div>
+
+      <details id="standbyDrawer" class="standby-drawer" style="display: none;">
+        <summary class="standby-summary">
+          <span style="display:inline-flex; align-items:center; gap:6px;">
+            <span class="icon-slot" data-icon="clock" data-size="13"></span>
+            <span id="standbySummaryText">Dudas anotadas (0)</span>
+          </span>
+          <span id="standbyStatusPill" class="standby-pill">En espera</span>
+        </summary>
+        <div id="standbyList" class="standby-list"></div>
+      </details>
 
       <div id="quickPromptChips" class="chips-wrap"></div>
 
@@ -149,9 +160,12 @@
           class="chat-input"
           placeholder="Pregunta sobre la clase o cualquier duda del ramo..."
           autocomplete="off">
+        <button id="btnSaveStandby" type="button" class="btn btn-outline btn-icon" style="flex-shrink:0;" title="Anotar duda en standby para después (sin consultar ahora)" aria-label="Anotar duda para después">
+          <span class="icon-slot" data-icon="clock" data-size="15"></span>
+        </button>
         <button id="btnSendChat" type="submit" class="btn btn-primary" aria-label="Enviar pregunta">
           <span class="icon-slot" data-icon="send" data-size="14"></span>
-          <span>Preguntar</span>
+          <span id="btnSendChatLabel">Preguntar</span>
         </button>
       </form>
     </section>

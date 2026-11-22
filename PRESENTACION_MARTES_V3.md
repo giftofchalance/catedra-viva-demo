@@ -158,7 +158,8 @@ flowchart TD
 | **Guía breve + pregunta sugerida / Zoom** | Estudiante | En 1–2 segundos tras preguntar (`Seguimiento`) | Reengancha con lo que explica el docente y le da confianza para levantar la mano o escribir en Zoom |
 | **Respuesta profunda con Quote-Reply** | Estudiante | En vivo si el docente abre `Full IA`, o al cierre (`Post-Clase`) | Resuelve el paso exacto que citó, con LaTeX e intuición causal |
 | **Banner / Radar de Comprensión** | Profesor y Auxiliar | En tiempo real durante la clase (`!classClosed`) | Decide si detenerse a dar un ejemplo o explicar un término clave; si lo aclara oralmente, se auto-resuelve |
-| **Apunte Vivo + Pauta Auxiliar (`.md`)** | Profesor, Auxiliar y Estudiantes | Inmediatamente al pulsar `Terminar Clase` | Descarga de apunte unificado y preparación focalizada de la ayudantía semanal sin coordinación extra |
+| **Bandeja de Dudas en Standby (`Dudas anotadas`)** | Estudiante | En `Modo Pizarra` (`Anotar`) o con el botón reloj en vivo | Permite anotar dudas al vuelo con su minuto `[MM:SS]` para volver a mirar la pizarra y elegir después `Resolver ahora` o `Ya entendí` |
+| **Apunte Vivo + Pauta Auxiliar (`.md`)** | Profesor, Auxiliar y Estudiantes | Inmediatamente al pulsar `Terminar Clase` | Descarga de apunte unificado (incluye dudas anotadas del alumno) para llevarlo a cualquier herramienta externa y preparación de ayudantía sin coordinación extra |
 
 ---
 
@@ -174,14 +175,17 @@ flowchart TD
 | `mapear_lamina_y_capitulos()` | `matchSlideForSegment()` (`data/coursesDb.js`) + `maybeUpdateSmartChapters()` con histéresis (`services/radar.js`) |
 | `agrupar_y_autoresolver_radar()` | `detectTopicCluster()` + `autoResolveClustersFromVoice()` (`services/radar.js`) + `upsertTopicCluster()` (`state/sessionStore.js`) |
 | `validar_cache_y_responder()` | `checkSafeSemanticCache()` + `isFollowUpQuestion()` (`services/semanticCache.js`) -> `isLikelyAcademicQuestion()` + `answerStudentQuestion()` (`services/tutor.js`) |
+| `bandeja_dudas_standby()` | `addStandbyDoubt()`, `resolveStandbyDoubt()` y `#standbyDrawer` (`public/js/student.js`), persistida en `sessionStorage`, con anclaje al `[MM:SS]`, `Resolver ahora` / `Ya entendí` y exportación `.md` |
 | `sincronizar_en_vivo()` | Hub SSE `/api/live/stream` con `stateVersion` (`state/sessionStore.js`, `public/js/icons.js`) |
 | `generar_capsula_y_postclase()` | `generateFusedPostClassCapsule()` + `generateClassSummary()` (`services/capsule.js`) + `/api/teacher/close-class` |
 
-### B. Backlog Técnico Pendiente (De Prototipo V4.1 a Piloto Real en Aula)
+### B. Backlog Técnico Pendiente (De Prototipo V4.2 a Piloto Real en Aula)
 1. **Persistencia en base de datos y multi-sala por código:** Hoy `liveSession` vive en RAM como sesión única por servidor; para uso paralelo en varios cursos reales se requiere SQLite/Postgres + salas aisladas (`/:roomCode`).
 2. **Autenticación / PIN docente:** Proteger `/profesor` y las rutas `/api/teacher/*` (hoy abiertas para agilizar demo) antes de abrir pilotos en aula.
 3. **Integración institucional (LTI / API U-Cursos y GPU facultad):** Conector oficial de programa/láminas y despliegue `vLLM` intra-campus para soberanía total de datos.
 4. **OCR automático para PDFs escaneados como imagen:** Hoy se extrae texto seleccionable (`.pdf`/`.pptx`/`.txt`/`.md`) y se devuelve aviso claro `422` si un PDF viene rasterizado como imagen.
+5. **Deduplicación y síntesis semántica batch post-clase:** Mantener en vivo las preguntas *raw* (`$0` y `0 ms` extra en el Radar) y al cierre fusionar únicamente dudas equivalentes reales (misma duda formulada distinto → `×2`) sin mezclar preguntas distintas de un mismo capítulo.
+6. **Transcripción viva con *context clues* colapsables:** Detectar conceptos clave mencionados en vivo (ej. `IS-LM`, `Ley de Faraday`) para mostrar chips desplegables colapsados por defecto (`+ Ver fórmula rápida`) y un marcador silencioso de 1 toque sin distraer ni exigir tipear en el chat.
 
 ---
 
@@ -202,6 +206,8 @@ flowchart TD
   - `Modo Seguimiento` *(default)*: respuestas concisas + sugerencia en voz alta.
   - **`En Vivo · Full IA` (`classClosed === false`)**: habilitable durante la clase sin cerrarla ni apagar el Radar.
   - **`Post-Clase · Full IA` (`classClosed === true`)**: activado automáticamente por **Terminar Clase**; desbloquea estudio completo y separa métricas `in_class` vs `post_class` en `qaLog`.
+- **Dudas en Standby (Descarga Cognitiva sin Gastar Tokens):** En `Modo Pizarra`, el botón pasa a `Anotar` y guarda cada duda por separado anclada al minuto `[MM:SS]` (mientras igual suma al Radar). En `Seguimiento` / `Full IA`, un botón de reloj permite estacionar dudas sin consultar ahora. Al reactivarse el chat o cerrarse la clase, la bandeja cambia vía SSE a `Listas para resolver` con `Resolver ahora` (responde anclado a lo que decía el profesor en ese minuto) y `Ya entendí` (descarta sin gastar tokens). Sobrevive recargas vía `sessionStorage` y se exporta en el `.md` del Apunte Vivo.
+- **Bucle In-Clase ↔ Post-Clase y Portabilidad de la Transcripción:** El activo irrepetible ocurre en vivo (voz + láminas + dudas *raw*), pero su valor se multiplica en el estudio Post-Clase y al poder exportar el apunte `.md` hacia herramientas externas (NotebookLM, Anki, Obsidian o cualquier IA). Como evolución natural hacia cero distracción en sala, el agrupamiento *raw* se sintetiza por equivalencia en batch post-clase y la transcripción puede incorporar *context clues* colapsables (desplegables opcionales de fórmulas sin abrir el chat).
 - **Agnosticismo Curricular:** `detectTopicCluster()`, `matchSlideForSegment()` y `maybeUpdateSmartChapters()` (histéresis `>= 50s`, `>= 8` palabras) operan sin reglas fijas por ramo, soportando cursos creados en sesión (`+ Nueva clase` -> `FI2002 Electromagnetismo`).
 - **UI/UX Simplificada:** Consola `/profesor` reducida a 2 zonas con **3 tarjetas principales**, iconos SVG estilo Lucide uniformes (`public/js/icons.js`, sin emojis de sistema), vista `/estudiante` móvil con `.topbar` de `48px`, barra inferior de 1 pulgar (`En Vivo | Tutor | Me perdí`), persistencia en `sessionStorage` y citas clicables.
 - **Soporte Nativo Zoom / Meet:** Captura directa de audio de pestaña/ventana + QR local (`/api/qr`) sin registro previo.
@@ -248,7 +254,7 @@ Al evaluar audio real de pizarra presencial (Prof. María Inés Baragatti), come
 | **Precisión conceptual (`TPM Chile`) + Quote-Reply + Guardias** | Acierta desplazamiento de **`LM`** a la izquierda; Quote-Reply (`fromCache: false`), prerequisito respondido, caché + bypass `"NO"`, `off_topic` bloqueado | PASS |
 | **Suite automatizada V4 (`eval_v4_report.json`) + Navegador** | **`11/11 PASS` (`ALL PASSED: true`)**; `0` errores consola en `/profesor` (`3` tarjetas, `1280×800`) y `/estudiante` móvil (`390×844`, `.topbar` `48px` + Quote-Reply) | PASS |
 
-*(Nota de ajuste V4.1 tras esa corrida: en el prompt del tutor se explicitó no confundir oferta monetaria con demanda de dinero, en móvil `/estudiante` se compactó el header de `48px` para títulos largos y se incorporó subida directa de `.pdf`/`.pptx` además de limpiar el modal de Privacidad).*
+*(Ajustes verificados V4.1 / V4.2 tras esa corrida: en el prompt del tutor se explicitó no confundir oferta monetaria con demanda de dinero, en móvil `/estudiante` se compactó el header de `48px`, se incorporó subida directa de `.pdf`/`.pptx`, se limpió el modal de Privacidad, y se implementó y verificó en navegador móvil `390×844` con `0` errores la bandeja de **Dudas en Standby**: 2 dudas anotadas en `Modo Pizarra`, persistencia tras recarga, transición en vivo vía SSE, descarte `Ya entendí` sin tokens, resolución contextualizada con `Resolver ahora` y guardado manual vía botón reloj).*
 
 ---
 
@@ -257,17 +263,17 @@ Al evaluar audio real de pizarra presencial (Prof. María Inés Baragatti), come
 1. **Pendiente fuera del código (crítico para completar los 8 entregables ante la comisión):**
    - Ejecutar la **Matriz de Validación con personas reales**: al menos entrevistas/pruebas acotadas con 1–2 profesores, 3–5 estudiantes, 1 auxiliar y contacto de docencia/datos, documentando también si apareció algún resultado que contradiga nuestros supuestos.
    - Definir nombre concreto del **ramo/facultad piloto** en la tabla de actores antes de presentar.
-2. **Pendiente en el código para pasar de prototipo V4.1 a piloto real en sala:**
+2. **Pendiente en el código para pasar de prototipo V4.2 a piloto real en sala:**
    - Persistencia en base de datos + aislamiento multi-sala por código de curso/sesión.
    - PIN / autenticación en `/profesor` y rutas `/api/teacher/*`.
-   - Integración LTI/API con U-Cursos, OCR automático para PDFs escaneados y eventual despliegue `vLLM` institucional.
+   - Integración LTI/API con U-Cursos, OCR para PDFs escaneados, síntesis semántica batch post-clase de preguntas *raw* equivalentes, *context clues* colapsables en la transcripción y eventual despliegue `vLLM` institucional.
 
 ---
 
 ## 3. Guión Sugerido de Demo en Vivo (5 Minutos)
 
 1. **Minuto 0:00–1:00 — Problema y Actores:** Usar la frase de Slide 4 y mostrar `/profesor` (3 tarjetas, flujo "prender y olvidarse").
-2. **Minuto 1:00–2:15 — Flujo de Audio Real, Cero Exclusión y Agnosticismo:** Mostrar transcripción solapada (`1.0s`), 4 categorías sin descartar historias docentes y cómo funciona incluso creando un curso en el acto o desde Zoom/Meet.
-3. **Minuto 2:15–3:30 — Estudiante en Vivo (`Seguimiento` + Quote-Reply + Radar):** Preguntar en `Seguimiento`, hacer **Citar** sobre la respuesta o transcripción, mostrar la sugerencia para levantar la mano/Zoom y el Radar anónimo en sala.
+2. **Minuto 1:00–2:15 — Flujo de Audio Real, Cero Exclusión y Agnosticismo:** Mostrar transcripción solapada (`1.0s`), 4 categorías sin descartar historias docentes y cómo funciona incluso creando un curso en el acto con PDF/PPTX o desde Zoom/Meet.
+3. **Minuto 2:15–3:30 — Estudiante en Vivo (`Seguimiento` + Quote-Reply + Standby + Radar):** Preguntar en `Seguimiento`, hacer **Citar** sobre la respuesta o transcripción, mostrar la sugerencia para levantar la mano/Zoom, cómo el alumno puede estacionar dudas en **Standby** (en `Modo Pizarra` o con el reloj sin distraerse) y el Radar anónimo en sala.
 4. **Minuto 3:30–4:30 — `Full IA` en Vivo vs `Terminar Clase` (Post-Clase):** Activar `Full IA` manteniendo la clase viva y luego presionar **Terminar Clase** para mostrar la cápsula fusionada y pauta del auxiliar.
 5. **Minuto 4:30–5:00 — Gobernanza de Datos, Validación y Backlog:** Explicar qué NO guardamos (privacidad), matriz de validación pendiente con usuarios reales, métricas empíricas (**`88%` cobertura VTT en pizarra, `893 ms`, `11/11 PASS`**) y backlog técnico hacia el piloto. *(Respaldo Git: `v3.1-stable`).*
