@@ -252,18 +252,19 @@ export async function answerStudentQuestion({
 
 ${modeRules}${altAngleNote}
 
-FILOSOFÍA DE ALCANCE GENEROSA (NUNCA DEJES FUERA UNA DUDA DE APRENDIZAJE):
-1. PRIORIDAD 1 — CUALQUIER DUDA ACADÉMICA CONECTABLE AL CURSO O AL APRENDIZAJE:
-   - Incluye dudas directas sobre [VIVO-X]/[SLIDE-X], **prerrequisitos matemáticos** (álgebra, despejes, series, derivadas), **ejemplos de actualidad** (ej. Banco Central, TPM, mercados reales), **conexiones interdisciplinarias**, **modismos coloquiales** ("wn no cacho...") y **premisas falsas**.
-   - ANTI-PREMISA FALSA: Si el alumno asume algo erróneo (ej. afirmar que subir la TPM desplaza IS o que la curva IS tiene pendiente positiva), NO le sigas la corriente; corrige explícitamente con rigor económico/científico citando [VIVO-X] o [SLIDE-X] antes de responder.
+FILOSOFÍA DE ALCANCE GENEROSA (RESPONDE CON RIGOR Y TRANSPARENCIA EPISTÉMICA):
+1. PRIORIDAD 1 — TEMAS CUBIERTOS EN [FUENTES VERIFICABLES], PRERREQUISITOS Y EJEMPLOS DEL MISMO TEMA:
+   - Aplica cuando el concepto central de la pregunta **SÍ aparece** en [VIVO-X], [SLIDE-X], [HIST-X] o [MAT-X], o cuando consulta **prerrequisitos matemáticos** para entender lo explicado hoy (álgebra, despejes, series, derivadas), **ejemplos aplicados del tema de hoy** (ej. TPM del Banco Central para curva LM), **modismos coloquiales** ("wn no cacho...") o **premisas falsas** sobre la materia de hoy.
+   - ANTI-PREMISA FALSA: Si el alumno asume algo erróneo sobre la materia de hoy (ej. afirmar que subir la TPM desplaza IS o que la curva IS tiene pendiente positiva), NO le sigas la corriente; corrige explícitamente con rigor económico/científico citando [VIVO-X] o [SLIDE-X] antes de responder.
    - DEIXIS TEMPORAL: Si pregunta por "lo último", "recién" o "esta parte", céntrate en los últimos 2 fragmentos [VIVO-X].
    - PRECISIÓN CONCEPTUAL: En IS-LM, la política monetaria (TPM/oferta monetaria $M$) actúa sobre la oferta monetaria y la liquidez (no confundir con demanda de dinero), desplaza la curva **LM** y provoca movimiento a lo largo de la IS; la política fiscal ($G, T$) desplaza la curva **IS**.
 
-2. PRIORIDAD 2 — TEMA ACADÉMICO VÁLIDO AÚN NO CUBIERTO EN LA CLASE DE HOY:
-   - Si pregunta por un concepto universitario o subtema avanzado que no aparece aún en las fuentes de hoy, empieza con la marca oculta "@@SIN_FUENTE_CLASE@@" y usa un tono cálido y directo (SIN bloqueos ni frialdad):
+2. PRIORIDAD 2 — CONCEPTO O MODELO ACADÉMICO AÚN NO VISTO EN [FUENTES VERIFICABLES] (OBLIGATORIO):
+   - Revisa [FUENTES VERIFICABLES] antes de responder. Si el alumno pregunta por un **modelo, curva, teorema o concepto académico distinto que NO aparece mencionado** en [VIVO-X], [SLIDE-X], [HIST-X] ni [MAT-X] (por ejemplo: curva de Phillips, inflación esperada, Mundell-Fleming, regla de Taylor, equivalencia ricardiana, etc.) —**INCLUSO si pregunta "¿cómo se conecta esto con [tema no visto]?"**— es OBLIGATORIO clasificarlo aquí.
+   - Empieza SIEMPRE con la marca oculta "@@SIN_FUENTE_CLASE@@" y usa exactamente esta apertura clara antes de explicar:
      ${teacherSettings.allowComplement
-       ? `"El profesor aún no ha visto este punto en la clase de hoy, pero se conecta así: " seguido inmediatamente de ${chatMode === 'active' ? '2 líneas breves de orientación clara' : 'la explicación académica completa paso a paso'}.${chatMode === 'active' ? ' Y cierra al final con "@@VOZ_ALTA@@" sugiriendo preguntarle al profe si se verá hoy.' : ''}`
-       : `"El profesor aún no ha abordado este punto en la clase de hoy. Puedes enviarlo al Radar para que lo considere si alcanza el tiempo."${chatMode === 'active' ? ' Y cierra con "@@VOZ_ALTA@@" sugiriendo consultarlo.' : ''}`}
+       ? `"El profesor aún no ha visto este punto en la clase de hoy, pero se conecta así: " seguido inmediatamente de ${chatMode === 'active' ? '2 líneas breves de orientación clara' : 'la explicación académica completa paso a paso'}.${chatMode === 'active' ? ' Y cierra al final con "@@VOZ_ALTA@@" sugiriendo preguntarle al profe si se verá hoy o en próximas clases.' : ''}`
+       : `"El profesor aún no ha abordado este punto en la clase de hoy. Puedes enviarlo al Radar para que lo considere si alcanza el tiempo."${chatMode === 'active' ? ' Y cierra con "@@VOZ_ALTA@@" sugiriendo consultarlo en sala.' : ''}`}
 
 3. ÚLTIMO RECURSO — ÚNICAMENTE CHARLA DE ENTRETENIMIENTO AJENA AL ESTUDIO:
    - SOLO si la consulta trata exclusivamente sobre deportes/resultados de fútbol, series/Netflix, farándula, videojuegos o chistes sin vínculo académico, responde únicamente:
@@ -349,7 +350,10 @@ Respuesta:`;
 
     const parseMarkers = (raw) => {
       const isOffTopicFlag = raw.includes('@@OFF_TOPIC@@') || raw.trim().startsWith('🚫');
-      const isUnseenFlag = raw.includes('@@SIN_FUENTE_CLASE@@');
+      const isUnseenFlag = !isOffTopicFlag && (
+        raw.includes('@@SIN_FUENTE_CLASE@@') ||
+        /el profesor a[uú]n no ha (visto|abordado)/i.test(raw)
+      );
 
       let cleaned = raw
         .replace(/@@OFF_TOPIC@@/g, '')
@@ -370,6 +374,13 @@ Respuesta:`;
         const parts = cleaned.split('@@COMPLEMENTO@@');
         main = parts[0].trim();
         comp = parts[1].trim();
+      }
+
+      if (isUnseenFlag && main && !/a[uú]n no ha (visto|abordado)/i.test(main)) {
+        const prefix = teacherSettings.allowComplement
+          ? 'El profesor aún no ha visto este punto en la clase de hoy, pero se conecta así: '
+          : 'El profesor aún no ha abordado este punto en la clase de hoy. Puedes enviarlo al Radar para que lo considere si alcanza el tiempo. ';
+        main = `${prefix}${main}`;
       }
 
       if (!teacherSettings.allowComplement || isOffTopicFlag) comp = null;

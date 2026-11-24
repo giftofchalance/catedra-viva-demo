@@ -917,6 +917,7 @@ function appendAssistantMessage(answerText, complementText = null, options = {})
   row.setAttribute('data-dynamic', 'true');
 
   if (questionType === 'off_topic') row.style.borderLeft = '3px solid var(--danger)';
+  else if (questionType === 'unseen_academic') row.style.borderLeft = '3px solid var(--warning)';
   else if (chatMode === 'full_ia') row.style.borderLeft = '3px solid var(--purple)';
 
   const formattedHtml = formatAnswerWithCitations(answerText);
@@ -951,8 +952,24 @@ function appendAssistantMessage(answerText, complementText = null, options = {})
   }
   const actionsHtml = actions.length > 0 ? `<div class="msg-actions-bar">${actions.join('')}</div>` : '';
 
-  const headerColor = isPaused ? '#FCD34D' : (questionType === 'off_topic' ? '#FCA5A5' : chatMode === 'full_ia' ? '#DDD6FE' : '#6EE7B7');
-  const headerTitle = isPaused ? 'MODO PIZARRA' : (questionType === 'off_topic' ? 'ALCANCE' : chatMode === 'full_ia' ? 'TUTOR FULL IA' : 'CO-PILOTO EN VIVO');
+  const headerColor = isPaused
+    ? '#FCD34D'
+    : (questionType === 'off_topic'
+      ? '#FCA5A5'
+      : questionType === 'unseen_academic'
+      ? '#FCD34D'
+      : chatMode === 'full_ia'
+      ? '#DDD6FE'
+      : '#6EE7B7');
+  const headerTitle = isPaused
+    ? 'MODO PIZARRA'
+    : (questionType === 'off_topic'
+      ? 'ALCANCE'
+      : questionType === 'unseen_academic'
+      ? (chatMode === 'full_ia' ? 'AÚN NO VISTO · FULL IA' : 'AÚN NO VISTO HOY')
+      : chatMode === 'full_ia'
+      ? 'TUTOR FULL IA'
+      : 'CO-PILOTO EN VIVO');
   const cachePill = fromCache ? `<span style="font-size:11px; color:var(--cite-color); font-weight:600;">· Caché</span>` : '';
 
   row.innerHTML = `
