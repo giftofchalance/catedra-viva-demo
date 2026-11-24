@@ -133,7 +133,7 @@
       <div id="simQuickChips" class="chips-wrap"></div>
 
       <div id="simChatMessages" class="chat-messages">
-        <div class="msg-row msg-assistant">
+        <div class="msg-row msg-assistant" data-welcome="true">
           <div class="msg-meta"><span style="font-weight:700; color:#6EE7B7;">CO-PILOTO DE AULA</span></div>
           <div style="font-size:13px;">Prueba los chips, citas clicables, Quote-Reply o las diferencias entre Seguimiento, Full IA en vivo y Post-Clase.</div>
         </div>
@@ -362,6 +362,8 @@
       simHistory = [];
       lastSimSig = '';
       simTime.textContent = '00:00';
+      simChatMessages.querySelectorAll('.msg-row:not([data-welcome="true"])').forEach(n => n.remove());
+      clearSimQuote();
       await syncState();
     }
 

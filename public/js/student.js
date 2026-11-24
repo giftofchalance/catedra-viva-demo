@@ -29,6 +29,7 @@ let lastKnownClassClosed = null;
 let activeQuotedContext = null; // { type: 'assistant' | 'transcript', refId, label, text }
 let conversationTurns = []; // [{ role: 'user' | 'assistant', text, quoteLabel, meta }]
 let standbyDoubts = []; // [{ id, text, timestamp, anchorEntryId, anchorText, quotedContext }]
+let lastSeenSessionEpoch = null;
 
 // Mapa de render incremental para el feed del profesor
 let renderedFeedSignature = '';
@@ -234,6 +235,30 @@ function clearQuotedContext() {
 
 function getStorageKey(courseId) {
   return `catedra_v4_chat_${courseId}`;
+}
+
+function getEpochStorageKey(courseId) {
+  return `catedra_v4_epoch_${courseId}`;
+}
+
+function clearStudentSessionUI(courseId) {
+  conversationTurns = [];
+  standbyDoubts = [];
+  if (courseId) {
+    try {
+      sessionStorage.removeItem(getStorageKey(courseId));
+      sessionStorage.removeItem(getStandbyStorageKey(courseId));
+    } catch (_) {}
+  }
+  renderedFeedSignature = '';
+  renderedEntryCache.clear();
+  chatMessages.querySelectorAll('[data-dynamic="true"]').forEach(n => n.remove());
+  clearQuotedContext();
+  renderStandbyDrawer();
+  if (quickPromptChips) quickPromptChips.style.display = 'flex';
+  if (modeToastBanner) modeToastBanner.style.display = 'none';
+  lastKnownChatState = null;
+  lastKnownClassClosed = null;
 }
 
 function saveConversationHistory() {
@@ -447,12 +472,25 @@ async function syncState() {
     currentClassClosed = Boolean(state.classClosed);
     currentIsActive = Boolean(state.isActive);
 
+    const serverEpoch = state.sessionEpoch != null ? String(state.sessionEpoch) : null;
+    const epochKey = getEpochStorageKey(state.course.id);
+    let storedEpoch = null;
+    try { storedEpoch = sessionStorage.getItem(epochKey); } catch (_) {}
+
+    const memoryEpochChanged = serverEpoch !== null && lastSeenSessionEpoch !== null && lastSeenSessionEpoch !== serverEpoch;
+    const storageEpochChanged = serverEpoch !== null && storedEpoch !== null && storedEpoch !== serverEpoch;
+    const epochChanged = memoryEpochChanged || storageEpochChanged;
+
     const courseChanged = !currentCourse || currentCourse.id !== state.course.id;
     const materialsChanged = Boolean(currentCourse) && (
       (currentCourse.ucursosSync?.slides?.length || 0) !== (state.course.ucursosSync?.slides?.length || 0) ||
       (currentCourse.ucursosSync?.deckTitle || '') !== (state.course.ucursosSync?.deckTitle || '') ||
       (currentCourse.materials?.length || 0) !== (state.course.materials?.length || 0)
     );
+
+    if (epochChanged && currentCourse && currentCourse.id !== state.course.id) {
+      clearStudentSessionUI(currentCourse.id);
+    }
 
     if (courseChanged) {
       currentCourse = state.course;
@@ -465,14 +503,28 @@ async function syncState() {
         : 'Pizarra Libre';
       renderBridge(currentCourse);
       renderQuickChips(currentCourse);
-      restoreConversationHistory(currentCourse.id);
-      restoreStandbyDoubts(currentCourse.id);
-    } else if (materialsChanged) {
-      currentCourse = state.course;
-      renderedFeedSignature = '';
-      ucursosStatusTag.textContent = currentCourse.ucursosSync?.slides?.length
-        ? `${currentCourse.ucursosSync.slides.length} láminas`
-        : 'Pizarra Libre';
+      if (epochChanged) {
+        clearStudentSessionUI(currentCourse.id);
+      } else {
+        restoreConversationHistory(currentCourse.id);
+        restoreStandbyDoubts(currentCourse.id);
+      }
+    } else {
+      if (epochChanged) {
+        clearStudentSessionUI(currentCourse.id);
+      }
+      if (materialsChanged) {
+        currentCourse = state.course;
+        renderedFeedSignature = '';
+        ucursosStatusTag.textContent = currentCourse.ucursosSync?.slides?.length
+          ? `${currentCourse.ucursosSync.slides.length} láminas`
+          : 'Pizarra Libre';
+      }
+    }
+
+    if (serverEpoch !== null) {
+      lastSeenSessionEpoch = serverEpoch;
+      try { sessionStorage.setItem(epochKey, serverEpoch); } catch (_) {}
     }
 
     updateConnectionAndModeUI(currentIsActive, currentSettings.chatState || 'active', currentClassClosed);

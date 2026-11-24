@@ -14,6 +14,7 @@ export const liveSession = {
   isActive: false,
   classClosed: false,
   stateVersion: 1,
+  sessionEpoch: Date.now(),
   courseId: activeCourseId,
   classTitle: 'Clase en Vivo',
   startTime: null,
@@ -109,6 +110,7 @@ export function resetLiveSessionData(keepChatMode = false) {
     liveSession.teacherSettings.chatState = 'active';
   }
   clearSemanticCache();
+  liveSession.sessionEpoch = Date.now();
   bumpStateVersion();
 }
 
@@ -194,6 +196,7 @@ export function buildPublicLiveState() {
 
   return {
     stateVersion: liveSession.stateVersion,
+    sessionEpoch: liveSession.sessionEpoch,
     classClosed: liveSession.classClosed,
     course,
     teacherSettings: liveSession.teacherSettings,
